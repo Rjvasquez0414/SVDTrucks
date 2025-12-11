@@ -10,6 +10,7 @@ import {
   Wrench,
   Bell,
   BarChart3,
+  FileText,
   ChevronLeft,
   ChevronRight,
 } from 'lucide-react';
@@ -25,6 +26,11 @@ const menuItems = [
     title: 'Vehiculos',
     href: '/vehiculos',
     icon: Truck,
+  },
+  {
+    title: 'Documentacion',
+    href: '/documentacion',
+    icon: FileText,
   },
   {
     title: 'Mantenimientos',
