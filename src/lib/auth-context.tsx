@@ -50,17 +50,29 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     console.log('[Auth] Configurando listener de auth...');
     let initialCheckDone = false;
 
+    // Funcion helper para cargar perfil con timeout
+    const loadProfileWithTimeout = async (user: User, timeoutMs: number = 5000) => {
+      try {
+        const timeoutPromise = new Promise<null>((_, reject) => {
+          setTimeout(() => reject(new Error('Profile fetch timeout')), timeoutMs);
+        });
+        const profilePromise = fetchUserProfile(user);
+        return await Promise.race([profilePromise, timeoutPromise]);
+      } catch (error) {
+        console.error('[Auth] Error cargando perfil:', error);
+        return null;
+      }
+    };
+
     // Usar onAuthStateChange como fuente principal
-    // Esto es mas confiable que getSession() que a veces se cuelga
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       async (event, session) => {
         console.log('[Auth] onAuthStateChange evento:', event, '| initialCheckDone:', initialCheckDone);
 
         if (event === 'INITIAL_SESSION') {
-          // Primera carga - verificar si hay sesion
           if (session?.user) {
             console.log('[Auth] Sesion inicial encontrada, cargando perfil...');
-            const profile = await fetchUserProfile(session.user);
+            const profile = await loadProfileWithTimeout(session.user);
             console.log('[Auth] Perfil cargado:', profile?.nombre || 'null');
             setUsuario(profile);
           } else {
@@ -70,13 +82,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           setIsLoading(false);
         } else if (event === 'SIGNED_IN' && session?.user) {
           console.log('[Auth] Usuario inicio sesion');
-          // Marcar como procesado ANTES del await para evitar que el timeout se dispare
           const wasInitialCheck = !initialCheckDone;
           if (wasInitialCheck) {
             console.log('[Auth] SIGNED_IN como evento inicial');
             initialCheckDone = true;
           }
-          const profile = await fetchUserProfile(session.user);
+          const profile = await loadProfileWithTimeout(session.user);
+          console.log('[Auth] Perfil cargado:', profile?.nombre || 'null');
           setUsuario(profile);
           if (wasInitialCheck) {
             console.log('[Auth] Completando carga inicial');
@@ -85,7 +97,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         } else if (event === 'SIGNED_OUT') {
           console.log('[Auth] Usuario cerro sesion');
           setUsuario(null);
-          // Si es el primer evento, completar carga
           if (!initialCheckDone) {
             initialCheckDone = true;
             setIsLoading(false);
@@ -96,14 +107,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
     );
 
-    // Timeout de seguridad - si ningun evento llega en 3s
+    // Timeout de seguridad - si ningun evento llega en 2s
     const timeoutId = setTimeout(() => {
       if (!initialCheckDone) {
-        console.warn('[Auth] TIMEOUT - no se recibio evento de auth en 3s');
+        console.warn('[Auth] TIMEOUT - no se recibio evento de auth en 2s');
         initialCheckDone = true;
         setIsLoading(false);
       }
-    }, 3000);
+    }, 2000);
 
     return () => {
       clearTimeout(timeoutId);
