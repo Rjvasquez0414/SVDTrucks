@@ -6,7 +6,6 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Separator } from '@/components/ui/separator';
 import { Truck, Loader2, AlertCircle, Eye, EyeOff } from 'lucide-react';
 import { useAuth } from '@/lib/auth-context';
 
@@ -25,23 +24,6 @@ export default function LoginPage() {
     setIsLoading(true);
 
     const result = await login(email, password);
-
-    if (result.success) {
-      router.push('/');
-    } else {
-      setError(result.error || 'Error al iniciar sesion');
-    }
-
-    setIsLoading(false);
-  };
-
-  const handleDemoLogin = async (demoEmail: string, demoPassword: string) => {
-    setEmail(demoEmail);
-    setPassword(demoPassword);
-    setError('');
-    setIsLoading(true);
-
-    const result = await login(demoEmail, demoPassword);
 
     if (result.success) {
       router.push('/');
@@ -136,51 +118,12 @@ export default function LoginPage() {
                 )}
               </Button>
             </form>
-
-            {/* Separator */}
-            <div className="relative my-6">
-              <Separator />
-              <span className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 bg-card px-2 text-xs text-muted-foreground">
-                Acceso rapido
-              </span>
-            </div>
-
-            {/* Demo accounts */}
-            <div className="space-y-2">
-              <p className="text-xs text-center text-muted-foreground mb-3">
-                Cuentas de demostracion
-              </p>
-              <Button
-                type="button"
-                variant="outline"
-                className="w-full justify-start"
-                onClick={() => handleDemoLogin('admin@svdtrucks.com', 'admin123')}
-                disabled={isLoading}
-              >
-                <div className="flex flex-col items-start">
-                  <span className="font-medium">Administrador</span>
-                  <span className="text-xs text-muted-foreground">admin@svdtrucks.com</span>
-                </div>
-              </Button>
-              <Button
-                type="button"
-                variant="outline"
-                className="w-full justify-start"
-                onClick={() => handleDemoLogin('demo@svdtrucks.com', 'demo123')}
-                disabled={isLoading}
-              >
-                <div className="flex flex-col items-start">
-                  <span className="font-medium">Usuario Demo</span>
-                  <span className="text-xs text-muted-foreground">demo@svdtrucks.com</span>
-                </div>
-              </Button>
-            </div>
           </CardContent>
         </Card>
 
         {/* Footer */}
         <p className="text-center text-xs text-muted-foreground mt-6">
-          Prototipo de sistema de gestion de flotas
+          SVD Trucks - Sistema de Gestion de Flotas
         </p>
       </div>
     </div>
