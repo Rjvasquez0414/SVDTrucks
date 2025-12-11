@@ -48,12 +48,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   // Escuchar cambios de autenticacion
   useEffect(() => {
     console.log('[Auth] Configurando listener de auth...');
+    let initialCheckDone = false;
 
     // Usar onAuthStateChange como fuente principal
     // Esto es mas confiable que getSession() que a veces se cuelga
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       async (event, session) => {
-        console.log('[Auth] onAuthStateChange evento:', event);
+        console.log('[Auth] onAuthStateChange evento:', event, '| initialCheckDone:', initialCheckDone);
 
         if (event === 'INITIAL_SESSION') {
           // Primera carga - verificar si hay sesion
@@ -65,24 +66,39 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           } else {
             console.log('[Auth] No hay sesion inicial');
           }
+          initialCheckDone = true;
           setIsLoading(false);
         } else if (event === 'SIGNED_IN' && session?.user) {
           console.log('[Auth] Usuario inicio sesion');
           const profile = await fetchUserProfile(session.user);
           setUsuario(profile);
+          // Si es el primer evento que recibimos, tambien completar la carga inicial
+          if (!initialCheckDone) {
+            console.log('[Auth] SIGNED_IN como evento inicial, completando carga');
+            initialCheckDone = true;
+            setIsLoading(false);
+          }
         } else if (event === 'SIGNED_OUT') {
           console.log('[Auth] Usuario cerro sesion');
           setUsuario(null);
+          // Si es el primer evento, completar carga
+          if (!initialCheckDone) {
+            initialCheckDone = true;
+            setIsLoading(false);
+          }
         } else if (event === 'TOKEN_REFRESHED') {
           console.log('[Auth] Token refrescado');
         }
       }
     );
 
-    // Timeout de seguridad - si INITIAL_SESSION no llega en 3s
+    // Timeout de seguridad - si ningun evento llega en 3s
     const timeoutId = setTimeout(() => {
-      console.warn('[Auth] TIMEOUT - no se recibio INITIAL_SESSION en 3s');
-      setIsLoading(false);
+      if (!initialCheckDone) {
+        console.warn('[Auth] TIMEOUT - no se recibio evento de auth en 3s');
+        initialCheckDone = true;
+        setIsLoading(false);
+      }
     }, 3000);
 
     return () => {
