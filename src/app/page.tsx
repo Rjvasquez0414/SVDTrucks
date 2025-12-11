@@ -1,39 +1,48 @@
+'use client';
+
+import { useState, useEffect } from 'react';
 import { MainLayout } from '@/components/layout/MainLayout';
 import { StatCard } from '@/components/dashboard/StatCard';
-import { AlertasRecientes } from '@/components/dashboard/AlertasRecientes';
-import { ProximosMantenimientos } from '@/components/dashboard/ProximosMantenimientos';
 import { FlotaResumen } from '@/components/dashboard/FlotaResumen';
-import { vehiculos } from '@/data/vehiculos';
-import { getAlertasPendientes } from '@/data/alertas';
-import { getCostoTotalMes, getMantenimientosMes } from '@/data/mantenimientos';
-import { Truck, AlertTriangle, Wrench, DollarSign } from 'lucide-react';
+import { getEstadisticasFlota, getVehiculos } from '@/lib/queries/vehiculos';
+import { Truck, AlertTriangle, Wrench, DollarSign, Loader2 } from 'lucide-react';
+import { VehiculoCompleto } from '@/types/database';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 
 export default function DashboardPage() {
-  // Estadísticas
-  const totalVehiculos = vehiculos.length;
-  const vehiculosActivos = vehiculos.filter((v) => v.estado === 'activo').length;
-  const vehiculosMantenimiento = vehiculos.filter((v) => v.estado === 'en_mantenimiento').length;
-  const alertasPendientes = getAlertasPendientes().length;
+  const [loading, setLoading] = useState(true);
+  const [vehiculos, setVehiculos] = useState<VehiculoCompleto[]>([]);
+  const [estadisticas, setEstadisticas] = useState({
+    total: 0,
+    activos: 0,
+    enMantenimiento: 0,
+    inactivos: 0,
+  });
 
-  // Costos del mes actual y anterior (usando febrero 2024 como referencia)
-  const costoMesActual = getCostoTotalMes(2024, 1); // Febrero
-  const costoMesAnterior = getCostoTotalMes(2024, 0); // Enero
-  const mantenimientosMes = getMantenimientosMes(2024, 1).length;
+  useEffect(() => {
+    async function loadData() {
+      setLoading(true);
+      const [stats, vehiculosData] = await Promise.all([
+        getEstadisticasFlota(),
+        getVehiculos(),
+      ]);
+      setEstadisticas(stats);
+      setVehiculos(vehiculosData);
+      setLoading(false);
+    }
+    loadData();
+  }, []);
 
-  // Calcular tendencia
-  const tendenciaCosto = costoMesAnterior > 0
-    ? ((costoMesActual - costoMesAnterior) / costoMesAnterior) * 100
-    : 0;
-
-  // Formatear costo
-  const formatearPesos = (valor: number) => {
-    return new Intl.NumberFormat('es-CO', {
-      style: 'currency',
-      currency: 'COP',
-      minimumFractionDigits: 0,
-      maximumFractionDigits: 0,
-    }).format(valor);
-  };
+  if (loading) {
+    return (
+      <MainLayout title="Dashboard">
+        <div className="flex flex-col items-center justify-center py-20">
+          <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+          <p className="mt-4 text-sm text-muted-foreground">Cargando dashboard...</p>
+        </div>
+      </MainLayout>
+    );
+  }
 
   return (
     <MainLayout title="Dashboard">
@@ -41,47 +50,68 @@ export default function DashboardPage() {
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
         <StatCard
           title="Total Vehiculos"
-          value={totalVehiculos}
-          subtitle={`${vehiculosActivos} activos`}
+          value={estadisticas.total}
+          subtitle={`${estadisticas.activos} activos`}
           icon={Truck}
           variant="default"
         />
         <StatCard
           title="En Mantenimiento"
-          value={vehiculosMantenimiento}
+          value={estadisticas.enMantenimiento}
           subtitle="Vehiculos en taller"
           icon={Wrench}
-          variant={vehiculosMantenimiento > 0 ? 'warning' : 'success'}
+          variant={estadisticas.enMantenimiento > 0 ? 'warning' : 'success'}
         />
         <StatCard
-          title="Alertas Pendientes"
-          value={alertasPendientes}
-          subtitle="Requieren atencion"
+          title="Inactivos"
+          value={estadisticas.inactivos}
+          subtitle="Vehiculos fuera de servicio"
           icon={AlertTriangle}
-          variant={alertasPendientes > 5 ? 'danger' : alertasPendientes > 0 ? 'warning' : 'success'}
+          variant={estadisticas.inactivos > 0 ? 'danger' : 'success'}
         />
         <StatCard
           title="Gastos del Mes"
-          value={formatearPesos(costoMesActual)}
-          subtitle={`${mantenimientosMes} mantenimientos`}
+          value="$ 0"
+          subtitle="Sin registros aun"
           icon={DollarSign}
-          trend={{
-            value: Math.abs(Math.round(tendenciaCosto)),
-            isPositive: tendenciaCosto < 0,
-          }}
           variant="default"
         />
       </div>
 
-      {/* Main Content Grid */}
-      <div className="mt-6 grid gap-6 lg:grid-cols-2">
-        <AlertasRecientes />
-        <ProximosMantenimientos />
-      </div>
-
       {/* Fleet Overview */}
       <div className="mt-6">
-        <FlotaResumen />
+        <FlotaResumen vehiculos={vehiculos} />
+      </div>
+
+      {/* Placeholder sections */}
+      <div className="mt-6 grid gap-6 lg:grid-cols-2">
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base">Alertas Recientes</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="flex flex-col items-center justify-center py-8 text-center">
+              <AlertTriangle className="h-10 w-10 text-muted-foreground/30" />
+              <p className="mt-2 text-sm text-muted-foreground">
+                No hay alertas registradas
+              </p>
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base">Proximos Mantenimientos</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="flex flex-col items-center justify-center py-8 text-center">
+              <Wrench className="h-10 w-10 text-muted-foreground/30" />
+              <p className="mt-2 text-sm text-muted-foreground">
+                No hay mantenimientos programados
+              </p>
+            </div>
+          </CardContent>
+        </Card>
       </div>
     </MainLayout>
   );

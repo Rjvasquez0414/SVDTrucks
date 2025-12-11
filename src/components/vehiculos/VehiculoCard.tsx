@@ -3,19 +3,19 @@
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Truck, Calendar, Gauge, Eye, MoreVertical } from 'lucide-react';
+import { Truck, Calendar, Gauge, Eye, MoreVertical, User } from 'lucide-react';
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
-import { Vehiculo, EstadoVehiculo } from '@/types';
+import { VehiculoCompleto, EstadoVehiculo } from '@/types/database';
 import { cn, formatNumber } from '@/lib/utils';
 import Link from 'next/link';
 
 interface VehiculoCardProps {
-  vehiculo: Vehiculo;
+  vehiculo: VehiculoCompleto;
 }
 
 const estadoBadge: Record<EstadoVehiculo, { label: string; variant: 'default' | 'secondary' | 'destructive' | 'outline' }> = {
@@ -42,6 +42,13 @@ export function VehiculoCard({ vehiculo }: VehiculoCardProps) {
           <div className="absolute top-2 right-2">
             <Badge variant={estado.variant}>{estado.label}</Badge>
           </div>
+          {vehiculo.color && (
+            <div className="absolute bottom-2 left-2">
+              <span className="text-xs bg-white/80 px-2 py-1 rounded text-slate-600">
+                {vehiculo.color}
+              </span>
+            </div>
+          )}
         </div>
 
         {/* Content */}
@@ -81,6 +88,12 @@ export function VehiculoCard({ vehiculo }: VehiculoCardProps) {
               <Calendar className="h-4 w-4" />
               <span>{vehiculo.año} - {tipoLabel[vehiculo.tipo]}</span>
             </div>
+            {vehiculo.conductores && (
+              <div className="flex items-center gap-2 text-muted-foreground">
+                <User className="h-4 w-4" />
+                <span className="truncate">{vehiculo.conductores.nombre}</span>
+              </div>
+            )}
           </div>
 
           {/* Action button */}

@@ -2,12 +2,14 @@
 
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Badge } from '@/components/ui/badge';
-import { ArrowRight, Truck, CheckCircle, AlertCircle, XCircle } from 'lucide-react';
-import { vehiculos } from '@/data/vehiculos';
+import { ArrowRight, Truck, CheckCircle, AlertCircle, XCircle, User } from 'lucide-react';
 import Link from 'next/link';
-import { EstadoVehiculo } from '@/types';
+import { EstadoVehiculo, VehiculoCompleto } from '@/types/database';
 import { cn, formatNumber } from '@/lib/utils';
+
+interface FlotaResumenProps {
+  vehiculos: VehiculoCompleto[];
+}
 
 const estadoConfig: Record<EstadoVehiculo, { label: string; color: string; icon: typeof Truck }> = {
   activo: {
@@ -27,7 +29,7 @@ const estadoConfig: Record<EstadoVehiculo, { label: string; color: string; icon:
   },
 };
 
-export function FlotaResumen() {
+export function FlotaResumen({ vehiculos }: FlotaResumenProps) {
   const vehiculosPorEstado = vehiculos.reduce(
     (acc, v) => {
       acc[v.estado] = (acc[v.estado] || 0) + 1;
@@ -85,6 +87,12 @@ export function FlotaResumen() {
                     <p className="text-xs text-muted-foreground">
                       {vehiculo.marca} {vehiculo.modelo}
                     </p>
+                    {vehiculo.conductores && (
+                      <p className="text-xs text-muted-foreground flex items-center gap-1">
+                        <User className="h-3 w-3" />
+                        {vehiculo.conductores.nombre}
+                      </p>
+                    )}
                   </div>
                 </div>
                 <div className="flex items-center gap-2">
@@ -103,6 +111,14 @@ export function FlotaResumen() {
               </Link>
             );
           })}
+          {vehiculos.length === 0 && (
+            <div className="flex flex-col items-center justify-center py-8 text-center">
+              <Truck className="h-10 w-10 text-muted-foreground/30" />
+              <p className="mt-2 text-sm text-muted-foreground">
+                No hay vehiculos registrados
+              </p>
+            </div>
+          )}
         </div>
       </CardContent>
     </Card>

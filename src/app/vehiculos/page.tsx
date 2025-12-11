@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { MainLayout } from '@/components/layout/MainLayout';
 import { VehiculoCard } from '@/components/vehiculos/VehiculoCard';
 import { Button } from '@/components/ui/button';
@@ -12,16 +12,29 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { vehiculos } from '@/data/vehiculos';
-import { Plus, Search, LayoutGrid, List } from 'lucide-react';
-import { EstadoVehiculo, TipoVehiculo } from '@/types';
+import { getVehiculos } from '@/lib/queries/vehiculos';
+import { Plus, Search, LayoutGrid, List, Loader2 } from 'lucide-react';
+import { EstadoVehiculo, TipoVehiculo, VehiculoCompleto } from '@/types/database';
 import { formatNumber } from '@/lib/utils';
+import Link from 'next/link';
 
 export default function VehiculosPage() {
+  const [vehiculos, setVehiculos] = useState<VehiculoCompleto[]>([]);
+  const [loading, setLoading] = useState(true);
   const [busqueda, setBusqueda] = useState('');
   const [filtroEstado, setFiltroEstado] = useState<EstadoVehiculo | 'todos'>('todos');
   const [filtroTipo, setFiltroTipo] = useState<TipoVehiculo | 'todos'>('todos');
   const [vistaGrid, setVistaGrid] = useState(true);
+
+  useEffect(() => {
+    async function loadVehiculos() {
+      setLoading(true);
+      const data = await getVehiculos();
+      setVehiculos(data);
+      setLoading(false);
+    }
+    loadVehiculos();
+  }, []);
 
   const vehiculosFiltrados = vehiculos.filter((v) => {
     const coincideBusqueda =
@@ -114,17 +127,27 @@ export default function VehiculosPage() {
 
       {/* Results count */}
       <p className="mt-4 text-sm text-muted-foreground">
-        Mostrando {vehiculosFiltrados.length} de {vehiculos.length} vehiculos
+        {loading ? 'Cargando...' : `Mostrando ${vehiculosFiltrados.length} de ${vehiculos.length} vehiculos`}
       </p>
 
+      {/* Loading state */}
+      {loading && (
+        <div className="mt-8 flex flex-col items-center justify-center p-12">
+          <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+          <p className="mt-4 text-sm text-muted-foreground">Cargando vehiculos...</p>
+        </div>
+      )}
+
       {/* Vehicles grid/list */}
-      {vistaGrid ? (
+      {!loading && vistaGrid && (
         <div className="mt-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
           {vehiculosFiltrados.map((vehiculo) => (
             <VehiculoCard key={vehiculo.id} vehiculo={vehiculo} />
           ))}
         </div>
-      ) : (
+      )}
+
+      {!loading && !vistaGrid && (
         <div className="mt-4 space-y-2">
           {vehiculosFiltrados.map((vehiculo) => (
             <div
@@ -140,6 +163,11 @@ export default function VehiculosPage() {
                   <p className="text-sm text-muted-foreground">
                     {vehiculo.marca} {vehiculo.modelo} ({vehiculo.año})
                   </p>
+                  {vehiculo.conductores && (
+                    <p className="text-xs text-muted-foreground">
+                      Conductor: {vehiculo.conductores.nombre}
+                    </p>
+                  )}
                 </div>
               </div>
               <div className="flex items-center gap-4">
@@ -150,7 +178,7 @@ export default function VehiculosPage() {
                   </p>
                 </div>
                 <Button variant="outline" size="sm" asChild>
-                  <a href={`/vehiculos/${vehiculo.id}`}>Ver</a>
+                  <Link href={`/vehiculos/${vehiculo.id}`}>Ver</Link>
                 </Button>
               </div>
             </div>
@@ -159,7 +187,7 @@ export default function VehiculosPage() {
       )}
 
       {/* Empty state */}
-      {vehiculosFiltrados.length === 0 && (
+      {!loading && vehiculosFiltrados.length === 0 && (
         <div className="mt-8 flex flex-col items-center justify-center rounded-lg border border-dashed p-12 text-center">
           <Search className="h-12 w-12 text-muted-foreground/50" />
           <h3 className="mt-4 text-lg font-semibold">No se encontraron vehiculos</h3>

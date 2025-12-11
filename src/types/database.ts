@@ -12,6 +12,7 @@ export type Json =
 // Enums de la base de datos
 export type TipoVehiculo = 'camion' | 'tractomula' | 'volqueta';
 export type EstadoVehiculo = 'activo' | 'en_mantenimiento' | 'inactivo';
+export type EstadoRemolque = 'activo' | 'en_mantenimiento' | 'inactivo';
 export type TipoMantenimiento = 'preventivo' | 'correctivo';
 export type PrioridadAlerta = 'alta' | 'media' | 'baja';
 export type EstadoAlerta = 'pendiente' | 'atendida' | 'descartada';
@@ -76,6 +77,84 @@ export interface Database {
           updated_at?: string;
         };
       };
+      conductores: {
+        Row: {
+          id: string;
+          nombre: string;
+          cedula: string | null;
+          telefono: string | null;
+          direccion: string | null;
+          licencia_numero: string | null;
+          licencia_categoria: string | null;
+          licencia_vencimiento: string | null;
+          fecha_ingreso: string | null;
+          activo: boolean;
+          notas: string | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          nombre: string;
+          cedula?: string | null;
+          telefono?: string | null;
+          direccion?: string | null;
+          licencia_numero?: string | null;
+          licencia_categoria?: string | null;
+          licencia_vencimiento?: string | null;
+          fecha_ingreso?: string | null;
+          activo?: boolean;
+          notas?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          nombre?: string;
+          cedula?: string | null;
+          telefono?: string | null;
+          direccion?: string | null;
+          licencia_numero?: string | null;
+          licencia_categoria?: string | null;
+          licencia_vencimiento?: string | null;
+          fecha_ingreso?: string | null;
+          activo?: boolean;
+          notas?: string | null;
+          updated_at?: string;
+        };
+      };
+      remolques: {
+        Row: {
+          id: string;
+          placa: string;
+          tipo: string | null;
+          capacidad: string | null;
+          año: number | null;
+          estado: EstadoRemolque;
+          notas: string | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          placa: string;
+          tipo?: string | null;
+          capacidad?: string | null;
+          año?: number | null;
+          estado?: EstadoRemolque;
+          notas?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          placa?: string;
+          tipo?: string | null;
+          capacidad?: string | null;
+          año?: number | null;
+          estado?: EstadoRemolque;
+          notas?: string | null;
+          updated_at?: string;
+        };
+      };
       vehiculos: {
         Row: {
           id: string;
@@ -95,6 +174,8 @@ export interface Database {
           numero_chasis: string | null;
           imagen_url: string | null;
           notas: string | null;
+          conductor_id: string | null;
+          remolque_id: string | null;
           created_at: string;
           updated_at: string;
         };
@@ -116,6 +197,8 @@ export interface Database {
           numero_chasis?: string | null;
           imagen_url?: string | null;
           notas?: string | null;
+          conductor_id?: string | null;
+          remolque_id?: string | null;
           created_at?: string;
           updated_at?: string;
         };
@@ -136,6 +219,8 @@ export interface Database {
           numero_chasis?: string | null;
           imagen_url?: string | null;
           notas?: string | null;
+          conductor_id?: string | null;
+          remolque_id?: string | null;
           updated_at?: string;
         };
       };
@@ -305,6 +390,7 @@ export interface Database {
     Enums: {
       tipo_vehiculo: TipoVehiculo;
       estado_vehiculo: EstadoVehiculo;
+      estado_remolque: EstadoRemolque;
       tipo_mantenimiento: TipoMantenimiento;
       prioridad_alerta: PrioridadAlerta;
       estado_alerta: EstadoAlerta;
@@ -319,6 +405,14 @@ export interface Database {
 export type Vehiculo = Database['public']['Tables']['vehiculos']['Row'];
 export type VehiculoInsert = Database['public']['Tables']['vehiculos']['Insert'];
 export type VehiculoUpdate = Database['public']['Tables']['vehiculos']['Update'];
+
+export type Conductor = Database['public']['Tables']['conductores']['Row'];
+export type ConductorInsert = Database['public']['Tables']['conductores']['Insert'];
+export type ConductorUpdate = Database['public']['Tables']['conductores']['Update'];
+
+export type Remolque = Database['public']['Tables']['remolques']['Row'];
+export type RemolqueInsert = Database['public']['Tables']['remolques']['Insert'];
+export type RemolqueUpdate = Database['public']['Tables']['remolques']['Update'];
 
 export type Mantenimiento = Database['public']['Tables']['mantenimientos']['Row'];
 export type MantenimientoInsert = Database['public']['Tables']['mantenimientos']['Insert'];
@@ -335,6 +429,12 @@ export type Usuario = Database['public']['Tables']['usuarios']['Row'];
 export type UsuarioInsert = Database['public']['Tables']['usuarios']['Insert'];
 
 export type CatalogoMantenimiento = Database['public']['Tables']['catalogo_mantenimiento']['Row'];
+
+// Tipo para vehiculo con conductor y remolque incluido (join)
+export type VehiculoCompleto = Vehiculo & {
+  conductores: Pick<Conductor, 'id' | 'nombre' | 'cedula'> | null;
+  remolques: Pick<Remolque, 'id' | 'placa'> | null;
+};
 
 // Tipo para mantenimiento con vehiculo incluido (join)
 export type MantenimientoConVehiculo = Mantenimiento & {

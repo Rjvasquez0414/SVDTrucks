@@ -1,6 +1,6 @@
 'use client';
 
-import { use } from 'react';
+import { use, useState, useEffect } from 'react';
 import { MainLayout } from '@/components/layout/MainLayout';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -20,15 +20,13 @@ import {
   CheckCircle,
   Clock,
   XCircle,
+  Loader2,
+  User,
 } from 'lucide-react';
-import { getVehiculoById, vehiculos } from '@/data/vehiculos';
-import { getMantenimientosByVehiculo } from '@/data/mantenimientos';
-import { getAlertasByVehiculo } from '@/data/alertas';
-import { getCategoriaInfo } from '@/data/tipos-mantenimiento';
-import { EstadoVehiculo } from '@/types';
+import { getVehiculoById } from '@/lib/queries/vehiculos';
+import { EstadoVehiculo, VehiculoCompleto } from '@/types/database';
 import { cn, formatNumber } from '@/lib/utils';
 import Link from 'next/link';
-import { notFound } from 'next/navigation';
 
 interface PageProps {
   params: Promise<{ id: string }>;
@@ -42,18 +40,21 @@ const estadoConfig: Record<EstadoVehiculo, { label: string; color: string; icon:
 
 export default function VehiculoDetallePage({ params }: PageProps) {
   const { id } = use(params);
-  const vehiculo = getVehiculoById(id);
+  const [vehiculo, setVehiculo] = useState<VehiculoCompleto | null>(null);
+  const [loading, setLoading] = useState(true);
 
-  if (!vehiculo) {
-    notFound();
-  }
+  useEffect(() => {
+    async function loadVehiculo() {
+      setLoading(true);
+      const data = await getVehiculoById(id);
+      setVehiculo(data);
+      setLoading(false);
+    }
+    loadVehiculo();
+  }, [id]);
 
-  const mantenimientos = getMantenimientosByVehiculo(id);
-  const alertas = getAlertasByVehiculo(id);
-  const estadoInfo = estadoConfig[vehiculo.estado];
-  const EstadoIcon = estadoInfo.icon;
-
-  const formatearFecha = (fecha: string) => {
+  const formatearFecha = (fecha: string | null) => {
+    if (!fecha) return 'No registrada';
     return new Date(fecha).toLocaleDateString('es-CO', {
       year: 'numeric',
       month: 'long',
@@ -61,15 +62,39 @@ export default function VehiculoDetallePage({ params }: PageProps) {
     });
   };
 
-  const formatearPesos = (valor: number) => {
-    return new Intl.NumberFormat('es-CO', {
-      style: 'currency',
-      currency: 'COP',
-      minimumFractionDigits: 0,
-    }).format(valor);
-  };
+  if (loading) {
+    return (
+      <MainLayout title="Cargando...">
+        <div className="flex flex-col items-center justify-center py-20">
+          <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+          <p className="mt-4 text-sm text-muted-foreground">Cargando vehiculo...</p>
+        </div>
+      </MainLayout>
+    );
+  }
 
-  const costoTotal = mantenimientos.reduce((sum, m) => sum + m.costo, 0);
+  if (!vehiculo) {
+    return (
+      <MainLayout title="Vehiculo no encontrado">
+        <div className="flex flex-col items-center justify-center py-20">
+          <Truck className="h-16 w-16 text-muted-foreground/30" />
+          <h2 className="mt-4 text-lg font-semibold">Vehiculo no encontrado</h2>
+          <p className="mt-2 text-sm text-muted-foreground">
+            El vehiculo que buscas no existe o fue eliminado
+          </p>
+          <Link href="/vehiculos" className="mt-4">
+            <Button>
+              <ArrowLeft className="h-4 w-4 mr-2" />
+              Volver a vehiculos
+            </Button>
+          </Link>
+        </div>
+      </MainLayout>
+    );
+  }
+
+  const estadoInfo = estadoConfig[vehiculo.estado];
+  const EstadoIcon = estadoInfo.icon;
 
   return (
     <MainLayout title={`Vehiculo ${vehiculo.placa}`}>
@@ -100,7 +125,7 @@ export default function VehiculoDetallePage({ params }: PageProps) {
             <p className="text-lg text-muted-foreground">
               {vehiculo.marca} {vehiculo.modelo} ({vehiculo.año})
             </p>
-            <div className="mt-2 flex items-center gap-4 text-sm text-muted-foreground">
+            <div className="mt-2 flex flex-wrap items-center gap-4 text-sm text-muted-foreground">
               <span className="flex items-center gap-1">
                 <Gauge className="h-4 w-4" />
                 {formatNumber(vehiculo.kilometraje)} km
@@ -108,6 +133,23 @@ export default function VehiculoDetallePage({ params }: PageProps) {
               <span className="capitalize">{vehiculo.tipo}</span>
               {vehiculo.color && <span>Color: {vehiculo.color}</span>}
             </div>
+            {vehiculo.conductores && (
+              <div className="mt-2 flex items-center gap-2 text-sm">
+                <User className="h-4 w-4 text-muted-foreground" />
+                <span>Conductor: <strong>{vehiculo.conductores.nombre}</strong></span>
+                {vehiculo.conductores.cedula && (
+                  <span className="text-muted-foreground">
+                    (C.C. {vehiculo.conductores.cedula})
+                  </span>
+                )}
+              </div>
+            )}
+            {vehiculo.remolques && (
+              <div className="mt-1 flex items-center gap-2 text-sm text-muted-foreground">
+                <Truck className="h-4 w-4" />
+                <span>Remolque: {vehiculo.remolques.placa}</span>
+              </div>
+            )}
           </div>
         </div>
         <div className="flex gap-2">
@@ -124,30 +166,11 @@ export default function VehiculoDetallePage({ params }: PageProps) {
         </div>
       </div>
 
-      {/* Alerts banner */}
-      {alertas.length > 0 && (
-        <div className="mt-4 rounded-lg border border-yellow-200 bg-yellow-50 p-4">
-          <div className="flex items-center gap-2">
-            <AlertTriangle className="h-5 w-5 text-yellow-600" />
-            <span className="font-medium text-yellow-800">
-              {alertas.length} alerta{alertas.length > 1 ? 's' : ''} pendiente{alertas.length > 1 ? 's' : ''}
-            </span>
-          </div>
-          <ul className="mt-2 space-y-1">
-            {alertas.map((alerta) => (
-              <li key={alerta.id} className="text-sm text-yellow-700">
-                - {alerta.mensaje}
-              </li>
-            ))}
-          </ul>
-        </div>
-      )}
-
       {/* Content tabs */}
       <Tabs defaultValue="general" className="mt-6">
         <TabsList>
           <TabsTrigger value="general">Informacion General</TabsTrigger>
-          <TabsTrigger value="historial">Historial ({mantenimientos.length})</TabsTrigger>
+          <TabsTrigger value="historial">Historial (0)</TabsTrigger>
           <TabsTrigger value="documentos">Documentos</TabsTrigger>
         </TabsList>
 
@@ -188,60 +211,57 @@ export default function VehiculoDetallePage({ params }: PageProps) {
                   <span className="text-muted-foreground">Kilometraje</span>
                   <span className="font-medium">{formatNumber(vehiculo.kilometraje)} km</span>
                 </div>
-                {vehiculo.numeroMotor && (
+                {vehiculo.numero_motor && (
                   <>
                     <Separator />
                     <div className="flex justify-between">
                       <span className="text-muted-foreground">No. Motor</span>
-                      <span className="font-medium text-xs">{vehiculo.numeroMotor}</span>
+                      <span className="font-medium text-xs">{vehiculo.numero_motor}</span>
                     </div>
                   </>
                 )}
-                {vehiculo.numeroChasis && (
+                {vehiculo.numero_chasis && (
                   <>
                     <Separator />
                     <div className="flex justify-between">
                       <span className="text-muted-foreground">No. Chasis</span>
-                      <span className="font-medium text-xs">{vehiculo.numeroChasis}</span>
+                      <span className="font-medium text-xs">{vehiculo.numero_chasis}</span>
                     </div>
                   </>
                 )}
               </CardContent>
             </Card>
 
-            {/* Estadísticas */}
+            {/* Conductor y Remolque */}
             <Card>
               <CardHeader>
-                <CardTitle className="text-base">Estadisticas</CardTitle>
+                <CardTitle className="text-base">Conductor y Remolque</CardTitle>
               </CardHeader>
               <CardContent className="space-y-3">
                 <div className="flex justify-between">
-                  <span className="text-muted-foreground">Total Mantenimientos</span>
-                  <span className="font-medium">{mantenimientos.length}</span>
-                </div>
-                <Separator />
-                <div className="flex justify-between">
-                  <span className="text-muted-foreground">Preventivos</span>
+                  <span className="text-muted-foreground">Conductor</span>
                   <span className="font-medium">
-                    {mantenimientos.filter((m) => m.tipo === 'preventivo').length}
+                    {vehiculo.conductores?.nombre || 'Sin asignar'}
                   </span>
                 </div>
                 <Separator />
                 <div className="flex justify-between">
-                  <span className="text-muted-foreground">Correctivos</span>
+                  <span className="text-muted-foreground">Cedula</span>
                   <span className="font-medium">
-                    {mantenimientos.filter((m) => m.tipo === 'correctivo').length}
+                    {vehiculo.conductores?.cedula || '-'}
                   </span>
                 </div>
                 <Separator />
                 <div className="flex justify-between">
-                  <span className="text-muted-foreground">Costo Total</span>
-                  <span className="font-medium">{formatearPesos(costoTotal)}</span>
+                  <span className="text-muted-foreground">Remolque</span>
+                  <span className="font-medium">
+                    {vehiculo.remolques?.placa || 'Sin asignar'}
+                  </span>
                 </div>
                 <Separator />
                 <div className="flex justify-between">
                   <span className="text-muted-foreground">Fecha Adquisicion</span>
-                  <span className="font-medium">{formatearFecha(vehiculo.fechaAdquisicion)}</span>
+                  <span className="font-medium">{formatearFecha(vehiculo.fecha_adquisicion)}</span>
                 </div>
               </CardContent>
             </Card>
@@ -254,78 +274,19 @@ export default function VehiculoDetallePage({ params }: PageProps) {
               <CardTitle className="text-base">Historial de Mantenimientos</CardTitle>
             </CardHeader>
             <CardContent>
-              {mantenimientos.length > 0 ? (
-                <div className="space-y-4">
-                  {mantenimientos.map((m) => {
-                    const categoriaInfo = getCategoriaInfo(m.categoria);
-                    return (
-                      <div
-                        key={m.id}
-                        className="flex items-start gap-4 rounded-lg border p-4"
-                      >
-                        <div
-                          className={cn(
-                            'flex h-10 w-10 shrink-0 items-center justify-center rounded-full',
-                            m.tipo === 'preventivo' ? 'bg-blue-100' : 'bg-orange-100'
-                          )}
-                        >
-                          <Wrench
-                            className={cn(
-                              'h-5 w-5',
-                              m.tipo === 'preventivo' ? 'text-blue-600' : 'text-orange-600'
-                            )}
-                          />
-                        </div>
-                        <div className="flex-1">
-                          <div className="flex items-start justify-between">
-                            <div>
-                              <p className="font-medium">
-                                {categoriaInfo?.nombre || m.categoria}
-                              </p>
-                              <p className="text-sm text-muted-foreground">{m.descripcion}</p>
-                            </div>
-                            <Badge variant={m.tipo === 'preventivo' ? 'secondary' : 'outline'}>
-                              {m.tipo === 'preventivo' ? 'Preventivo' : 'Correctivo'}
-                            </Badge>
-                          </div>
-                          <div className="mt-2 flex flex-wrap gap-4 text-sm text-muted-foreground">
-                            <span className="flex items-center gap-1">
-                              <Calendar className="h-4 w-4" />
-                              {formatearFecha(m.fecha)}
-                            </span>
-                            <span className="flex items-center gap-1">
-                              <Gauge className="h-4 w-4" />
-                              {formatNumber(m.kilometraje)} km
-                            </span>
-                            <span className="font-medium text-foreground">
-                              {formatearPesos(m.costo)}
-                            </span>
-                          </div>
-                          {m.observaciones && (
-                            <p className="mt-2 text-sm italic text-muted-foreground">
-                              {m.observaciones}
-                            </p>
-                          )}
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              ) : (
-                <div className="flex flex-col items-center justify-center py-8 text-center">
-                  <Wrench className="h-12 w-12 text-muted-foreground/50" />
-                  <h3 className="mt-4 font-semibold">Sin historial</h3>
-                  <p className="mt-1 text-sm text-muted-foreground">
-                    Este vehiculo no tiene mantenimientos registrados
-                  </p>
-                  <Link href="/mantenimientos/nuevo" className="mt-4">
-                    <Button size="sm">
-                      <Plus className="h-4 w-4 mr-2" />
-                      Registrar Mantenimiento
-                    </Button>
-                  </Link>
-                </div>
-              )}
+              <div className="flex flex-col items-center justify-center py-8 text-center">
+                <Wrench className="h-12 w-12 text-muted-foreground/50" />
+                <h3 className="mt-4 font-semibold">Sin historial</h3>
+                <p className="mt-1 text-sm text-muted-foreground">
+                  Este vehiculo no tiene mantenimientos registrados
+                </p>
+                <Link href="/mantenimientos/nuevo" className="mt-4">
+                  <Button size="sm">
+                    <Plus className="h-4 w-4 mr-2" />
+                    Registrar Mantenimiento
+                  </Button>
+                </Link>
+              </div>
             </CardContent>
           </Card>
         </TabsContent>
@@ -344,19 +305,23 @@ export default function VehiculoDetallePage({ params }: PageProps) {
                     <div>
                       <p className="font-medium">SOAT</p>
                       <p className="text-sm text-muted-foreground">
-                        Vence: {formatearFecha(vehiculo.vencimientoSOAT)}
+                        Vence: {vehiculo.vencimiento_soat ? formatearFecha(vehiculo.vencimiento_soat) : 'No registrado'}
                       </p>
                     </div>
                   </div>
-                  <Badge
-                    variant={
-                      new Date(vehiculo.vencimientoSOAT) < new Date()
-                        ? 'destructive'
-                        : 'outline'
-                    }
-                  >
-                    {new Date(vehiculo.vencimientoSOAT) < new Date() ? 'Vencido' : 'Vigente'}
-                  </Badge>
+                  {vehiculo.vencimiento_soat ? (
+                    <Badge
+                      variant={
+                        new Date(vehiculo.vencimiento_soat) < new Date()
+                          ? 'destructive'
+                          : 'outline'
+                      }
+                    >
+                      {new Date(vehiculo.vencimiento_soat) < new Date() ? 'Vencido' : 'Vigente'}
+                    </Badge>
+                  ) : (
+                    <Badge variant="secondary">Sin registrar</Badge>
+                  )}
                 </div>
 
                 {/* Técnico-mecánica */}
@@ -366,21 +331,25 @@ export default function VehiculoDetallePage({ params }: PageProps) {
                     <div>
                       <p className="font-medium">Revision Tecnicomecanica</p>
                       <p className="text-sm text-muted-foreground">
-                        Vence: {formatearFecha(vehiculo.vencimientoTecnicomecanica)}
+                        Vence: {vehiculo.vencimiento_tecnomecanica ? formatearFecha(vehiculo.vencimiento_tecnomecanica) : 'No registrado'}
                       </p>
                     </div>
                   </div>
-                  <Badge
-                    variant={
-                      new Date(vehiculo.vencimientoTecnicomecanica) < new Date()
-                        ? 'destructive'
-                        : 'outline'
-                    }
-                  >
-                    {new Date(vehiculo.vencimientoTecnicomecanica) < new Date()
-                      ? 'Vencido'
-                      : 'Vigente'}
-                  </Badge>
+                  {vehiculo.vencimiento_tecnomecanica ? (
+                    <Badge
+                      variant={
+                        new Date(vehiculo.vencimiento_tecnomecanica) < new Date()
+                          ? 'destructive'
+                          : 'outline'
+                      }
+                    >
+                      {new Date(vehiculo.vencimiento_tecnomecanica) < new Date()
+                        ? 'Vencido'
+                        : 'Vigente'}
+                    </Badge>
+                  ) : (
+                    <Badge variant="secondary">Sin registrar</Badge>
+                  )}
                 </div>
               </div>
             </CardContent>
