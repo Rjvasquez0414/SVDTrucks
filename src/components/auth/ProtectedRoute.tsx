@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { useRouter, usePathname } from 'next/navigation';
 import { useAuth } from '@/lib/auth-context';
 import { Loader2, Truck } from 'lucide-react';
@@ -16,8 +16,25 @@ export function ProtectedRoute({ children }: ProtectedRouteProps) {
   const { isAuthenticated, isLoading } = useAuth();
   const router = useRouter();
   const pathname = usePathname();
+  const [loadingMessage, setLoadingMessage] = useState('Conectando...');
 
   const isPublicRoute = PUBLIC_ROUTES.includes(pathname);
+
+  // Cambiar mensaje de loading despues de unos segundos
+  useEffect(() => {
+    if (isLoading) {
+      const timer1 = setTimeout(() => {
+        setLoadingMessage('Estableciendo conexion...');
+      }, 3000);
+      const timer2 = setTimeout(() => {
+        setLoadingMessage('Esto esta tardando mas de lo normal...');
+      }, 7000);
+      return () => {
+        clearTimeout(timer1);
+        clearTimeout(timer2);
+      };
+    }
+  }, [isLoading]);
 
   useEffect(() => {
     if (!isLoading) {
@@ -31,8 +48,9 @@ export function ProtectedRoute({ children }: ProtectedRouteProps) {
     }
   }, [isAuthenticated, isLoading, isPublicRoute, router]);
 
-  // Mostrar loading mientras se verifica la autenticacion
-  if (isLoading) {
+  // Si es ruta publica (login), no bloquear con loading
+  // Solo mostrar loading en rutas protegidas
+  if (isLoading && !isPublicRoute) {
     return (
       <div className="min-h-screen flex flex-col items-center justify-center bg-gradient-to-br from-slate-100 to-slate-200">
         <div className="flex flex-col items-center gap-4">
@@ -41,7 +59,7 @@ export function ProtectedRoute({ children }: ProtectedRouteProps) {
           </div>
           <div className="flex items-center gap-2 text-muted-foreground">
             <Loader2 className="h-5 w-5 animate-spin" />
-            <span>Cargando...</span>
+            <span>{loadingMessage}</span>
           </div>
         </div>
       </div>
@@ -49,7 +67,7 @@ export function ProtectedRoute({ children }: ProtectedRouteProps) {
   }
 
   // Redirigiendo si no tiene permisos
-  if (!isAuthenticated && !isPublicRoute) {
+  if (!isAuthenticated && !isPublicRoute && !isLoading) {
     return (
       <div className="min-h-screen flex flex-col items-center justify-center bg-gradient-to-br from-slate-100 to-slate-200">
         <div className="flex items-center gap-2 text-muted-foreground">
