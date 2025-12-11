@@ -43,6 +43,33 @@ export type TipoAlerta =
   | 'vencimiento_tecnomecanica'
   | 'vehiculo_inactivo';
 
+export type CategoriaDocumento = 'cabezote' | 'tanque' | 'conductor' | 'polizas';
+
+export type TipoDocumento =
+  // Cabezote
+  | 'soat'
+  | 'poliza_rc_hidrocarburos'
+  | 'revision_tecnomecanica'
+  // Tanque
+  | 'prueba_hidrostatica'
+  | 'certificado_luz_negra'
+  | 'programa_mantenimiento_copetran'
+  | 'certificacion_quinta_rueda'
+  // Conductor
+  | 'eps'
+  | 'arl'
+  | 'curso_mercancias_peligrosas'
+  | 'curso_hse_ecopetrol'
+  | 'licencia_conduccion'
+  | 'curso_manejo_defensivo'
+  | 'curso_trabajo_alturas'
+  // Polizas
+  | 'poliza_todo_riesgo_cabezote'
+  | 'poliza_todo_riesgo_tanque'
+  | 'poliza_decreto_1079'
+  | 'poliza_rce_copetran'
+  | 'poliza_rce_exceso_copetran';
+
 export interface Database {
   public: {
     Tables: {
@@ -377,6 +404,93 @@ export interface Database {
           activo?: boolean;
         };
       };
+      documentos: {
+        Row: {
+          id: string;
+          tipo: TipoDocumento;
+          categoria: CategoriaDocumento;
+          nombre: string;
+          vehiculo_id: string | null;
+          remolque_id: string | null;
+          conductor_id: string | null;
+          fecha_emision: string | null;
+          fecha_vencimiento: string | null;
+          archivo_url: string | null;
+          archivo_nombre: string | null;
+          numero_documento: string | null;
+          entidad_emisora: string | null;
+          notas: string | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          tipo: TipoDocumento;
+          categoria: CategoriaDocumento;
+          nombre: string;
+          vehiculo_id?: string | null;
+          remolque_id?: string | null;
+          conductor_id?: string | null;
+          fecha_emision?: string | null;
+          fecha_vencimiento?: string | null;
+          archivo_url?: string | null;
+          archivo_nombre?: string | null;
+          numero_documento?: string | null;
+          entidad_emisora?: string | null;
+          notas?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          tipo?: TipoDocumento;
+          categoria?: CategoriaDocumento;
+          nombre?: string;
+          vehiculo_id?: string | null;
+          remolque_id?: string | null;
+          conductor_id?: string | null;
+          fecha_emision?: string | null;
+          fecha_vencimiento?: string | null;
+          archivo_url?: string | null;
+          archivo_nombre?: string | null;
+          numero_documento?: string | null;
+          entidad_emisora?: string | null;
+          notas?: string | null;
+          updated_at?: string;
+        };
+      };
+      catalogo_documentos: {
+        Row: {
+          id: string;
+          tipo: TipoDocumento;
+          categoria: CategoriaDocumento;
+          nombre: string;
+          descripcion: string | null;
+          requiere_vencimiento: boolean;
+          aplica_a: string[];
+          es_copetran: boolean;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          tipo: TipoDocumento;
+          categoria: CategoriaDocumento;
+          nombre: string;
+          descripcion?: string | null;
+          requiere_vencimiento?: boolean;
+          aplica_a: string[];
+          es_copetran?: boolean;
+          created_at?: string;
+        };
+        Update: {
+          tipo?: TipoDocumento;
+          categoria?: CategoriaDocumento;
+          nombre?: string;
+          descripcion?: string | null;
+          requiere_vencimiento?: boolean;
+          aplica_a?: string[];
+          es_copetran?: boolean;
+        };
+      };
     };
     Views: {
       [_ in never]: never;
@@ -445,3 +559,13 @@ export type MantenimientoConVehiculo = Mantenimiento & {
 export type AlertaConVehiculo = Alerta & {
   vehiculos: Pick<Vehiculo, 'placa' | 'marca' | 'modelo'>;
 };
+
+// Tipos de documentos (usando la tabla de Database)
+export type Documento = Database['public']['Tables']['documentos']['Row'];
+export type DocumentoInsert = Database['public']['Tables']['documentos']['Insert'];
+export type DocumentoUpdate = Database['public']['Tables']['documentos']['Update'];
+
+export type CatalogoDocumento = Database['public']['Tables']['catalogo_documentos']['Row'];
+
+// Estado del documento basado en fecha de vencimiento
+export type EstadoDocumento = 'vigente' | 'por_vencer' | 'vencido' | 'sin_registrar';

@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { MainLayout } from '@/components/layout/MainLayout';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -28,18 +28,19 @@ import {
   Calendar,
 } from 'lucide-react';
 import { getVehiculos } from '@/lib/queries/vehiculos';
-import { VehiculoCompleto } from '@/types/database';
+import { getDocumentosCompletos } from '@/lib/queries/documentos';
+import { VehiculoCompleto, Documento, TipoDocumento, CategoriaDocumento, EstadoDocumento } from '@/types/database';
 import { cn } from '@/lib/utils';
+import { DocumentoModal } from '@/components/documentos/DocumentoModal';
 
 // Tipos de documentos por categoria
-const documentosPorCategoria = {
+const documentosPorCategoria: Record<CategoriaDocumento, { tipo: TipoDocumento; nombre: string }[]> = {
   cabezote: [
     { tipo: 'soat', nombre: 'SOAT' },
     { tipo: 'poliza_rc_hidrocarburos', nombre: 'Poliza RC Hidrocarburos' },
     { tipo: 'revision_tecnomecanica', nombre: 'Revision Tecnomecanica' },
   ],
   tanque: [
-    { tipo: 'poliza_rc_hidrocarburos', nombre: 'Poliza RC Hidrocarburos' },
     { tipo: 'prueba_hidrostatica', nombre: 'Prueba Hidrostatica' },
     { tipo: 'certificado_luz_negra', nombre: 'Certificado Luz Negra (Copetran)' },
     { tipo: 'programa_mantenimiento_copetran', nombre: 'Programa de Mantenimiento (Copetran)' },
@@ -63,17 +64,37 @@ const documentosPorCategoria = {
   ],
 };
 
+// Calcular estado del documento basado en fecha de vencimiento
+function calcularEstadoDocumento(fechaVencimiento: string | null): EstadoDocumento {
+  if (!fechaVencimiento) return 'vigente'; // Sin fecha = vigente indefinido
+
+  const hoy = new Date();
+  hoy.setHours(0, 0, 0, 0);
+  const vencimiento = new Date(fechaVencimiento);
+  vencimiento.setHours(0, 0, 0, 0);
+
+  const diasRestantes = Math.ceil((vencimiento.getTime() - hoy.getTime()) / (1000 * 60 * 60 * 24));
+
+  if (diasRestantes < 0) return 'vencido';
+  if (diasRestantes <= 30) return 'por_vencer';
+  return 'vigente';
+}
+
 // Componente para mostrar un documento
 function DocumentoCard({
   nombre,
   tipo,
   fechaVencimiento,
   estado,
+  documento,
+  onAgregar,
 }: {
   nombre: string;
-  tipo: string;
+  tipo: TipoDocumento;
   fechaVencimiento?: string | null;
-  estado: 'vigente' | 'por_vencer' | 'vencido' | 'sin_registrar';
+  estado: EstadoDocumento;
+  documento?: Documento | null;
+  onAgregar: () => void;
 }) {
   const estadoConfig = {
     vigente: {
@@ -122,13 +143,25 @@ function DocumentoCard({
             <Calendar className="h-3 w-3" />
             Vence: {formatearFecha(fechaVencimiento)}
           </p>
+          {documento?.entidad_emisora && (
+            <p className="text-xs text-muted-foreground">
+              {documento.entidad_emisora}
+            </p>
+          )}
         </div>
       </div>
       <div className="flex items-center gap-2">
-        <Badge className={cn('gap-1', config.color)} variant="outline">
-          <Icon className="h-3 w-3" />
-          {config.label}
-        </Badge>
+        {estado === 'sin_registrar' ? (
+          <Button size="sm" variant="outline" onClick={onAgregar}>
+            <Plus className="h-4 w-4 mr-1" />
+            Agregar
+          </Button>
+        ) : (
+          <Badge className={cn('gap-1', config.color)} variant="outline">
+            <Icon className="h-3 w-3" />
+            {config.label}
+          </Badge>
+        )}
       </div>
     </div>
   );
@@ -138,13 +171,17 @@ function DocumentoCard({
 function CategoriaDocumentos({
   titulo,
   icon: IconComponent,
-  documentos,
+  tiposDocumentos,
+  documentosRegistrados,
   entidadNombre,
+  onAgregarDocumento,
 }: {
   titulo: string;
   icon: typeof Truck;
-  documentos: { tipo: string; nombre: string }[];
+  tiposDocumentos: { tipo: TipoDocumento; nombre: string }[];
+  documentosRegistrados: Documento[];
   entidadNombre?: string;
+  onAgregarDocumento: (tipo: TipoDocumento) => void;
 }) {
   return (
     <Card>
@@ -160,15 +197,25 @@ function CategoriaDocumentos({
         </div>
       </CardHeader>
       <CardContent className="space-y-3">
-        {documentos.map((doc) => (
-          <DocumentoCard
-            key={doc.tipo}
-            nombre={doc.nombre}
-            tipo={doc.tipo}
-            fechaVencimiento={null}
-            estado="sin_registrar"
-          />
-        ))}
+        {tiposDocumentos.map((tipoDoc) => {
+          // Buscar si existe el documento registrado
+          const docRegistrado = documentosRegistrados.find(d => d.tipo === tipoDoc.tipo);
+          const estado: EstadoDocumento = docRegistrado
+            ? calcularEstadoDocumento(docRegistrado.fecha_vencimiento)
+            : 'sin_registrar';
+
+          return (
+            <DocumentoCard
+              key={tipoDoc.tipo}
+              nombre={tipoDoc.nombre}
+              tipo={tipoDoc.tipo}
+              fechaVencimiento={docRegistrado?.fecha_vencimiento}
+              estado={estado}
+              documento={docRegistrado}
+              onAgregar={() => onAgregarDocumento(tipoDoc.tipo)}
+            />
+          );
+        })}
       </CardContent>
     </Card>
   );
@@ -177,8 +224,37 @@ function CategoriaDocumentos({
 export default function DocumentacionPage() {
   const [vehiculos, setVehiculos] = useState<VehiculoCompleto[]>([]);
   const [selectedVehiculo, setSelectedVehiculo] = useState<string>('');
+  const [documentos, setDocumentos] = useState<Documento[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadingDocs, setLoadingDocs] = useState(false);
 
+  // Modal state
+  const [modalOpen, setModalOpen] = useState(false);
+  const [modalCategoria, setModalCategoria] = useState<CategoriaDocumento>('cabezote');
+  const [modalTipoPreseleccionado, setModalTipoPreseleccionado] = useState<TipoDocumento | undefined>();
+
+  const vehiculoSeleccionado = vehiculos.find((v) => v.id === selectedVehiculo);
+
+  // Cargar documentos del vehiculo seleccionado
+  const cargarDocumentos = useCallback(async () => {
+    if (!vehiculoSeleccionado) return;
+
+    setLoadingDocs(true);
+    try {
+      const docs = await getDocumentosCompletos(
+        vehiculoSeleccionado.id,
+        vehiculoSeleccionado.remolque_id,
+        vehiculoSeleccionado.conductor_id
+      );
+      setDocumentos(docs);
+    } catch (error) {
+      console.error('Error cargando documentos:', error);
+    } finally {
+      setLoadingDocs(false);
+    }
+  }, [vehiculoSeleccionado]);
+
+  // Cargar vehiculos al inicio
   useEffect(() => {
     async function loadData() {
       setLoading(true);
@@ -192,7 +268,54 @@ export default function DocumentacionPage() {
     loadData();
   }, []);
 
-  const vehiculoSeleccionado = vehiculos.find((v) => v.id === selectedVehiculo);
+  // Cargar documentos cuando cambia el vehiculo seleccionado
+  useEffect(() => {
+    if (vehiculoSeleccionado) {
+      cargarDocumentos();
+    }
+  }, [vehiculoSeleccionado, cargarDocumentos]);
+
+  // Filtrar documentos por categoria
+  const getDocumentosPorCategoria = (categoria: CategoriaDocumento): Documento[] => {
+    return documentos.filter(d => d.categoria === categoria);
+  };
+
+  // Abrir modal para agregar documento
+  const handleAgregarDocumento = (categoria: CategoriaDocumento, tipo?: TipoDocumento) => {
+    setModalCategoria(categoria);
+    setModalTipoPreseleccionado(tipo);
+    setModalOpen(true);
+  };
+
+  // Calcular resumen de estados
+  const calcularResumen = () => {
+    let vigentes = 0;
+    let porVencer = 0;
+    let vencidos = 0;
+    let sinRegistrar = 0;
+
+    // Contar todos los tipos de documentos posibles
+    const todasCategorias: CategoriaDocumento[] = ['cabezote', 'tanque', 'conductor', 'polizas'];
+
+    todasCategorias.forEach(categoria => {
+      const tiposEnCategoria = documentosPorCategoria[categoria];
+      tiposEnCategoria.forEach(tipoDoc => {
+        const docRegistrado = documentos.find(d => d.tipo === tipoDoc.tipo);
+        if (!docRegistrado) {
+          sinRegistrar++;
+        } else {
+          const estado = calcularEstadoDocumento(docRegistrado.fecha_vencimiento);
+          if (estado === 'vigente') vigentes++;
+          else if (estado === 'por_vencer') porVencer++;
+          else if (estado === 'vencido') vencidos++;
+        }
+      });
+    });
+
+    return { vigentes, porVencer, vencidos, sinRegistrar };
+  };
+
+  const resumen = calcularResumen();
 
   if (loading) {
     return (
@@ -231,7 +354,7 @@ export default function DocumentacionPage() {
               ))}
             </SelectContent>
           </Select>
-          <Button>
+          <Button onClick={() => handleAgregarDocumento('cabezote')}>
             <Plus className="h-4 w-4 mr-2" />
             Agregar Documento
           </Button>
@@ -276,6 +399,13 @@ export default function DocumentacionPage() {
                   </div>
                 </div>
               )}
+
+              {loadingDocs && (
+                <div className="flex items-center gap-2 ml-auto">
+                  <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+                  <span className="text-sm text-muted-foreground">Cargando documentos...</span>
+                </div>
+              )}
             </div>
           </CardContent>
         </Card>
@@ -306,8 +436,10 @@ export default function DocumentacionPage() {
           <CategoriaDocumentos
             titulo="Documentos del Cabezote"
             icon={Truck}
-            documentos={documentosPorCategoria.cabezote}
+            tiposDocumentos={documentosPorCategoria.cabezote}
+            documentosRegistrados={getDocumentosPorCategoria('cabezote')}
             entidadNombre={vehiculoSeleccionado?.placa}
+            onAgregarDocumento={(tipo) => handleAgregarDocumento('cabezote', tipo)}
           />
         </TabsContent>
 
@@ -315,8 +447,10 @@ export default function DocumentacionPage() {
           <CategoriaDocumentos
             titulo="Documentos del Tanque"
             icon={Container}
-            documentos={documentosPorCategoria.tanque}
+            tiposDocumentos={documentosPorCategoria.tanque}
+            documentosRegistrados={getDocumentosPorCategoria('tanque')}
             entidadNombre={vehiculoSeleccionado?.remolques?.placa || 'Sin asignar'}
+            onAgregarDocumento={(tipo) => handleAgregarDocumento('tanque', tipo)}
           />
         </TabsContent>
 
@@ -324,8 +458,10 @@ export default function DocumentacionPage() {
           <CategoriaDocumentos
             titulo="Documentos del Conductor"
             icon={User}
-            documentos={documentosPorCategoria.conductor}
+            tiposDocumentos={documentosPorCategoria.conductor}
+            documentosRegistrados={getDocumentosPorCategoria('conductor')}
             entidadNombre={vehiculoSeleccionado?.conductores?.nombre || 'Sin asignar'}
+            onAgregarDocumento={(tipo) => handleAgregarDocumento('conductor', tipo)}
           />
         </TabsContent>
 
@@ -333,7 +469,9 @@ export default function DocumentacionPage() {
           <CategoriaDocumentos
             titulo="Polizas de Seguros"
             icon={Shield}
-            documentos={documentosPorCategoria.polizas}
+            tiposDocumentos={documentosPorCategoria.polizas}
+            documentosRegistrados={getDocumentosPorCategoria('polizas')}
+            onAgregarDocumento={(tipo) => handleAgregarDocumento('polizas', tipo)}
           />
         </TabsContent>
       </Tabs>
@@ -350,7 +488,7 @@ export default function DocumentacionPage() {
                 <CheckCircle className="h-5 w-5 text-green-600" />
               </div>
               <div>
-                <p className="text-2xl font-bold">0</p>
+                <p className="text-2xl font-bold">{resumen.vigentes}</p>
                 <p className="text-sm text-muted-foreground">Vigentes</p>
               </div>
             </div>
@@ -359,7 +497,7 @@ export default function DocumentacionPage() {
                 <Clock className="h-5 w-5 text-yellow-600" />
               </div>
               <div>
-                <p className="text-2xl font-bold">0</p>
+                <p className="text-2xl font-bold">{resumen.porVencer}</p>
                 <p className="text-sm text-muted-foreground">Por Vencer</p>
               </div>
             </div>
@@ -368,7 +506,7 @@ export default function DocumentacionPage() {
                 <XCircle className="h-5 w-5 text-red-600" />
               </div>
               <div>
-                <p className="text-2xl font-bold">0</p>
+                <p className="text-2xl font-bold">{resumen.vencidos}</p>
                 <p className="text-sm text-muted-foreground">Vencidos</p>
               </div>
             </div>
@@ -377,13 +515,27 @@ export default function DocumentacionPage() {
                 <AlertTriangle className="h-5 w-5 text-gray-600" />
               </div>
               <div>
-                <p className="text-2xl font-bold">22</p>
+                <p className="text-2xl font-bold">{resumen.sinRegistrar}</p>
                 <p className="text-sm text-muted-foreground">Sin Registrar</p>
               </div>
             </div>
           </div>
         </CardContent>
       </Card>
+
+      {/* Modal para agregar documento */}
+      {vehiculoSeleccionado && (
+        <DocumentoModal
+          open={modalOpen}
+          onOpenChange={setModalOpen}
+          categoria={modalCategoria}
+          vehiculoId={vehiculoSeleccionado.id}
+          remolqueId={vehiculoSeleccionado.remolque_id}
+          conductorId={vehiculoSeleccionado.conductor_id}
+          onSuccess={cargarDocumentos}
+          tipoPreseleccionado={modalTipoPreseleccionado}
+        />
+      )}
     </MainLayout>
   );
 }
