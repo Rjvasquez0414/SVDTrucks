@@ -1,5 +1,5 @@
 import { supabase } from '@/lib/supabase';
-import type { Vehiculo, VehiculoCompleto, VehiculoInsert, VehiculoUpdate } from '@/types/database';
+import type { VehiculoCompleto } from '@/types/database';
 
 // Obtener todos los vehiculos con conductor y remolque
 export async function getVehiculos(): Promise<VehiculoCompleto[]> {
@@ -42,7 +42,7 @@ export async function getVehiculoById(id: string): Promise<VehiculoCompleto | nu
 
 // Obtener estadisticas de la flota
 export async function getEstadisticasFlota() {
-  const { data: vehiculos, error } = await supabase
+  const { data, error } = await supabase
     .from('vehiculos')
     .select('estado');
 
@@ -56,6 +56,8 @@ export async function getEstadisticasFlota() {
     };
   }
 
+  const vehiculos = data as { estado: string }[];
+
   return {
     total: vehiculos.length,
     activos: vehiculos.filter((v) => v.estado === 'activo').length,
@@ -64,48 +66,3 @@ export async function getEstadisticasFlota() {
   };
 }
 
-// Crear vehiculo
-export async function createVehiculo(vehiculo: VehiculoInsert) {
-  const { data, error } = await supabase
-    .from('vehiculos')
-    .insert(vehiculo)
-    .select()
-    .single();
-
-  if (error) {
-    console.error('Error creating vehiculo:', error);
-    throw error;
-  }
-
-  return data;
-}
-
-// Actualizar vehiculo
-export async function updateVehiculo(id: string, vehiculo: VehiculoUpdate) {
-  const { data, error } = await supabase
-    .from('vehiculos')
-    .update(vehiculo)
-    .eq('id', id)
-    .select()
-    .single();
-
-  if (error) {
-    console.error('Error updating vehiculo:', error);
-    throw error;
-  }
-
-  return data;
-}
-
-// Eliminar vehiculo
-export async function deleteVehiculo(id: string) {
-  const { error } = await supabase
-    .from('vehiculos')
-    .delete()
-    .eq('id', id);
-
-  if (error) {
-    console.error('Error deleting vehiculo:', error);
-    throw error;
-  }
-}
