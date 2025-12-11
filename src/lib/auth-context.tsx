@@ -70,12 +70,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           setIsLoading(false);
         } else if (event === 'SIGNED_IN' && session?.user) {
           console.log('[Auth] Usuario inicio sesion');
+          // Marcar como procesado ANTES del await para evitar que el timeout se dispare
+          const wasInitialCheck = !initialCheckDone;
+          if (wasInitialCheck) {
+            console.log('[Auth] SIGNED_IN como evento inicial');
+            initialCheckDone = true;
+          }
           const profile = await fetchUserProfile(session.user);
           setUsuario(profile);
-          // Si es el primer evento que recibimos, tambien completar la carga inicial
-          if (!initialCheckDone) {
-            console.log('[Auth] SIGNED_IN como evento inicial, completando carga');
-            initialCheckDone = true;
+          if (wasInitialCheck) {
+            console.log('[Auth] Completando carga inicial');
             setIsLoading(false);
           }
         } else if (event === 'SIGNED_OUT') {
