@@ -47,22 +47,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   // Escuchar cambios de autenticacion
   useEffect(() => {
-    // Obtener sesion inicial
+    // Obtener sesion inicial - version optimizada
     const initAuth = async () => {
       try {
-        // Timeout de 10 segundos para evitar loading infinito
-        const timeoutPromise = new Promise((_, reject) =>
-          setTimeout(() => reject(new Error('Auth timeout')), 10000)
-        );
+        // Primero intentar obtener sesion local (sin red)
+        const { data: { session }, error } = await supabase.auth.getSession();
 
-        const sessionPromise = supabase.auth.getSession();
-
-        const { data: { session } } = await Promise.race([
-          sessionPromise,
-          timeoutPromise,
-        ]) as Awaited<typeof sessionPromise>;
+        if (error) {
+          console.error('Error getting session:', error);
+          setIsLoading(false);
+          return;
+        }
 
         if (session?.user) {
+          // Hay sesion local, cargar perfil
           const profile = await fetchUserProfile(session.user);
           setUsuario(profile);
         }
@@ -73,7 +71,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
     };
 
-    initAuth();
+    // Timeout de seguridad - si no responde en 5s, continuar sin auth
+    const timeoutId = setTimeout(() => {
+      console.warn('Auth initialization timeout - continuing without auth');
+      setIsLoading(false);
+    }, 5000);
+
+    initAuth().finally(() => clearTimeout(timeoutId));
 
     // Suscribirse a cambios de auth
     const { data: { subscription } } = supabase.auth.onAuthStateChange(

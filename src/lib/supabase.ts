@@ -13,7 +13,19 @@ if (!supabaseUrl || !supabaseAnonKey) {
 
 export const supabase = createClient<Database>(
   supabaseUrl || '',
-  supabaseAnonKey || ''
+  supabaseAnonKey || '',
+  {
+    auth: {
+      autoRefreshToken: true,
+      persistSession: true,
+      detectSessionInUrl: true,
+    },
+    global: {
+      headers: {
+        'x-my-custom-header': 'svd-trucks',
+      },
+    },
+  }
 );
 
 // Cliente para uso en servidor (Server Components, API Routes)
