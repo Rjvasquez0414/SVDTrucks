@@ -50,7 +50,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     // Obtener sesion inicial
     const initAuth = async () => {
       try {
-        const { data: { session } } = await supabase.auth.getSession();
+        // Timeout de 10 segundos para evitar loading infinito
+        const timeoutPromise = new Promise((_, reject) =>
+          setTimeout(() => reject(new Error('Auth timeout')), 10000)
+        );
+
+        const sessionPromise = supabase.auth.getSession();
+
+        const { data: { session } } = await Promise.race([
+          sessionPromise,
+          timeoutPromise,
+        ]) as Awaited<typeof sessionPromise>;
 
         if (session?.user) {
           const profile = await fetchUserProfile(session.user);
