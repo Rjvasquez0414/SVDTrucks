@@ -47,63 +47,64 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   // Escuchar cambios de autenticacion
   useEffect(() => {
-    // Obtener sesion inicial - version optimizada
-    const initAuth = async () => {
-      try {
-        // Primero intentar obtener sesion local (sin red)
-        const { data: { session }, error } = await supabase.auth.getSession();
+    console.log('[Auth] Configurando listener de auth...');
 
-        if (error) {
-          console.error('Error getting session:', error);
-          setIsLoading(false);
-          return;
-        }
-
-        if (session?.user) {
-          // Hay sesion local, cargar perfil
-          const profile = await fetchUserProfile(session.user);
-          setUsuario(profile);
-        }
-      } catch (error) {
-        console.error('Error initializing auth:', error);
-      } finally {
-        setIsLoading(false);
-      }
-    };
-
-    // Timeout de seguridad - si no responde en 5s, continuar sin auth
-    const timeoutId = setTimeout(() => {
-      console.warn('Auth initialization timeout - continuing without auth');
-      setIsLoading(false);
-    }, 5000);
-
-    initAuth().finally(() => clearTimeout(timeoutId));
-
-    // Suscribirse a cambios de auth
+    // Usar onAuthStateChange como fuente principal
+    // Esto es mas confiable que getSession() que a veces se cuelga
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       async (event, session) => {
-        if (event === 'SIGNED_IN' && session?.user) {
+        console.log('[Auth] onAuthStateChange evento:', event);
+
+        if (event === 'INITIAL_SESSION') {
+          // Primera carga - verificar si hay sesion
+          if (session?.user) {
+            console.log('[Auth] Sesion inicial encontrada, cargando perfil...');
+            const profile = await fetchUserProfile(session.user);
+            console.log('[Auth] Perfil cargado:', profile?.nombre || 'null');
+            setUsuario(profile);
+          } else {
+            console.log('[Auth] No hay sesion inicial');
+          }
+          setIsLoading(false);
+        } else if (event === 'SIGNED_IN' && session?.user) {
+          console.log('[Auth] Usuario inicio sesion');
           const profile = await fetchUserProfile(session.user);
           setUsuario(profile);
         } else if (event === 'SIGNED_OUT') {
+          console.log('[Auth] Usuario cerro sesion');
           setUsuario(null);
+        } else if (event === 'TOKEN_REFRESHED') {
+          console.log('[Auth] Token refrescado');
         }
       }
     );
 
+    // Timeout de seguridad - si INITIAL_SESSION no llega en 3s
+    const timeoutId = setTimeout(() => {
+      console.warn('[Auth] TIMEOUT - no se recibio INITIAL_SESSION en 3s');
+      setIsLoading(false);
+    }, 3000);
+
     return () => {
+      clearTimeout(timeoutId);
       subscription.unsubscribe();
     };
   }, []);
 
   const login = async (email: string, password: string): Promise<{ success: boolean; error?: string }> => {
     try {
+      console.log('[Auth] Iniciando login para:', email);
+      const startTime = Date.now();
+
       const { data, error } = await supabase.auth.signInWithPassword({
         email: email.toLowerCase().trim(),
         password,
       });
 
+      console.log('[Auth] signInWithPassword completado en', Date.now() - startTime, 'ms');
+
       if (error) {
+        console.log('[Auth] Error de Supabase:', error.message);
         // Traducir errores comunes
         if (error.message.includes('Invalid login credentials')) {
           return { success: false, error: 'Credenciales incorrectas' };
@@ -115,22 +116,30 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
 
       if (!data.user) {
+        console.log('[Auth] No se recibio usuario');
         return { success: false, error: 'Error al iniciar sesion' };
       }
+
+      console.log('[Auth] Usuario autenticado, obteniendo perfil...');
+      const profileStart = Date.now();
 
       // Obtener perfil
       const profile = await fetchUserProfile(data.user);
 
+      console.log('[Auth] fetchUserProfile completado en', Date.now() - profileStart, 'ms');
+
       if (!profile) {
+        console.log('[Auth] No se encontro perfil en tabla usuarios');
         // Usuario existe en auth pero no tiene perfil en la tabla usuarios
         await supabase.auth.signOut();
         return { success: false, error: 'Usuario no tiene acceso al sistema' };
       }
 
+      console.log('[Auth] Login exitoso, perfil:', profile.nombre);
       setUsuario(profile);
       return { success: true };
     } catch (error) {
-      console.error('Login error:', error);
+      console.error('[Auth] Login error:', error);
       return { success: false, error: 'Error de conexion' };
     }
   };
