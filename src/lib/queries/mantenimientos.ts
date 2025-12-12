@@ -330,12 +330,16 @@ export async function getCostosPorMes(año: number): Promise<{ mes: number; cost
 
 /**
  * Actualiza el kilometraje del vehiculo despues de un mantenimiento
+ * Tambien actualiza la fecha de ultima actualizacion de kilometraje
  */
 export async function actualizarKilometrajeVehiculo(vehiculoId: string, kilometraje: number): Promise<void> {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const { error } = await (supabase as any)
     .from('vehiculos')
-    .update({ kilometraje })
+    .update({
+      kilometraje,
+      kilometraje_updated_at: new Date().toISOString()
+    })
     .eq('id', vehiculoId);
 
   if (error) {

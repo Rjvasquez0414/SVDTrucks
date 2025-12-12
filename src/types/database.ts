@@ -53,7 +53,8 @@ export type TipoAlerta =
   | 'documento_vencido'           // Documento ya vencido
   | 'vehiculo_inactivo'           // Vehiculo sin actividad reciente
   | 'kilometraje_alto'            // Vehiculo con kilometraje muy alto
-  | 'mantenimiento_pendiente';    // Mantenimiento que ya paso su fecha/km
+  | 'mantenimiento_pendiente'     // Mantenimiento que ya paso su fecha/km
+  | 'actualizar_kilometraje';     // Recordatorio para actualizar kilometraje (cada 2 dias)
 
 export type CategoriaDocumento = 'cabezote' | 'tanque' | 'conductor' | 'polizas';
 
@@ -203,6 +204,7 @@ export interface Database {
           año: number;
           tipo: TipoVehiculo;
           kilometraje: number;
+          kilometraje_updated_at: string | null;
           estado: EstadoVehiculo;
           fecha_adquisicion: string;
           proxima_revision: string | null;
@@ -226,6 +228,7 @@ export interface Database {
           año: number;
           tipo: TipoVehiculo;
           kilometraje?: number;
+          kilometraje_updated_at?: string | null;
           estado?: EstadoVehiculo;
           fecha_adquisicion: string;
           proxima_revision?: string | null;
@@ -248,6 +251,7 @@ export interface Database {
           año?: number;
           tipo?: TipoVehiculo;
           kilometraje?: number;
+          kilometraje_updated_at?: string | null;
           estado?: EstadoVehiculo;
           fecha_adquisicion?: string;
           proxima_revision?: string | null;

@@ -1,19 +1,28 @@
 'use client';
 
-import { use, useState, useEffect } from 'react';
+import { use, useState, useEffect, useCallback } from 'react';
 import { MainLayout } from '@/components/layout/MainLayout';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Separator } from '@/components/ui/separator';
+import { Input } from '@/components/ui/input';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from '@/components/ui/dialog';
 import {
   Truck,
   Calendar,
   Gauge,
   FileText,
   Wrench,
-  AlertTriangle,
   ArrowLeft,
   Edit,
   Plus,
@@ -22,8 +31,12 @@ import {
   XCircle,
   Loader2,
   User,
+  RefreshCw,
 } from 'lucide-react';
 import { getVehiculoById } from '@/lib/queries/vehiculos';
+import { actualizarKilometrajeVehiculo } from '@/lib/queries/mantenimientos';
+import { marcarAlertaAtendida } from '@/lib/queries/alertas';
+import { supabase } from '@/lib/supabase';
 import { EstadoVehiculo, VehiculoCompleto } from '@/types/database';
 import { cn, formatNumber } from '@/lib/utils';
 import Link from 'next/link';
@@ -42,16 +55,62 @@ export default function VehiculoDetallePage({ params }: PageProps) {
   const { id } = use(params);
   const [vehiculo, setVehiculo] = useState<VehiculoCompleto | null>(null);
   const [loading, setLoading] = useState(true);
+  const [kmDialogOpen, setKmDialogOpen] = useState(false);
+  const [nuevoKilometraje, setNuevoKilometraje] = useState('');
+  const [updatingKm, setUpdatingKm] = useState(false);
+
+  const loadVehiculo = useCallback(async () => {
+    setLoading(true);
+    const data = await getVehiculoById(id);
+    setVehiculo(data);
+    if (data) {
+      setNuevoKilometraje(data.kilometraje.toString());
+    }
+    setLoading(false);
+  }, [id]);
 
   useEffect(() => {
-    async function loadVehiculo() {
-      setLoading(true);
-      const data = await getVehiculoById(id);
-      setVehiculo(data);
-      setLoading(false);
-    }
     loadVehiculo();
-  }, [id]);
+  }, [loadVehiculo]);
+
+  const handleActualizarKilometraje = async () => {
+    if (!vehiculo || !nuevoKilometraje) return;
+
+    const km = parseInt(nuevoKilometraje);
+    if (isNaN(km) || km < vehiculo.kilometraje) {
+      alert('El kilometraje debe ser mayor o igual al actual');
+      return;
+    }
+
+    setUpdatingKm(true);
+    try {
+      await actualizarKilometrajeVehiculo(vehiculo.id, km);
+
+      // Marcar alertas de actualizar_kilometraje como atendidas
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { data: alertas } = await (supabase as any)
+        .from('alertas')
+        .select('id')
+        .eq('vehiculo_id', vehiculo.id)
+        .eq('tipo', 'actualizar_kilometraje')
+        .eq('estado', 'pendiente');
+
+      if (alertas) {
+        for (const alerta of alertas) {
+          await marcarAlertaAtendida(alerta.id);
+        }
+      }
+
+      // Recargar vehiculo
+      await loadVehiculo();
+      setKmDialogOpen(false);
+    } catch (error) {
+      console.error('Error actualizando kilometraje:', error);
+      alert('Error al actualizar el kilometraje');
+    } finally {
+      setUpdatingKm(false);
+    }
+  };
 
   const formatearFecha = (fecha: string | null) => {
     if (!fecha) return 'No registrada';
@@ -207,9 +266,45 @@ export default function VehiculoDetallePage({ params }: PageProps) {
                   <span className="font-medium capitalize">{vehiculo.tipo}</span>
                 </div>
                 <Separator />
-                <div className="flex justify-between">
+                <div className="flex justify-between items-center">
                   <span className="text-muted-foreground">Kilometraje</span>
-                  <span className="font-medium">{formatNumber(vehiculo.kilometraje)} km</span>
+                  <div className="flex items-center gap-2">
+                    <span className="font-medium">{formatNumber(vehiculo.kilometraje)} km</span>
+                    <Dialog open={kmDialogOpen} onOpenChange={setKmDialogOpen}>
+                      <DialogTrigger asChild>
+                        <Button variant="ghost" size="icon" className="h-7 w-7">
+                          <RefreshCw className="h-3.5 w-3.5" />
+                        </Button>
+                      </DialogTrigger>
+                      <DialogContent>
+                        <DialogHeader>
+                          <DialogTitle>Actualizar Kilometraje</DialogTitle>
+                          <DialogDescription>
+                            Ingresa el nuevo kilometraje del vehiculo {vehiculo.placa}.
+                            El valor debe ser mayor o igual al actual ({formatNumber(vehiculo.kilometraje)} km).
+                          </DialogDescription>
+                        </DialogHeader>
+                        <div className="py-4">
+                          <Input
+                            type="number"
+                            value={nuevoKilometraje}
+                            onChange={(e) => setNuevoKilometraje(e.target.value)}
+                            placeholder="Nuevo kilometraje"
+                            min={vehiculo.kilometraje}
+                          />
+                        </div>
+                        <DialogFooter>
+                          <Button variant="outline" onClick={() => setKmDialogOpen(false)}>
+                            Cancelar
+                          </Button>
+                          <Button onClick={handleActualizarKilometraje} disabled={updatingKm}>
+                            {updatingKm && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+                            Actualizar
+                          </Button>
+                        </DialogFooter>
+                      </DialogContent>
+                    </Dialog>
+                  </div>
                 </div>
                 {vehiculo.numero_motor && (
                   <>

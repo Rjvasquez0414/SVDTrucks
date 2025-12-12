@@ -19,6 +19,7 @@ import {
   Loader2,
   RefreshCw,
   Wrench,
+  Gauge,
 } from 'lucide-react';
 import {
   getAlertasPendientes,
@@ -41,6 +42,7 @@ const iconosPorTipo: Record<TipoAlerta, typeof AlertTriangle> = {
   vehiculo_inactivo: Truck,
   kilometraje_alto: Truck,
   mantenimiento_pendiente: AlertTriangle,
+  actualizar_kilometraje: Gauge,
 };
 
 const nombresTipo: Record<TipoAlerta, string> = {
@@ -51,6 +53,7 @@ const nombresTipo: Record<TipoAlerta, string> = {
   vehiculo_inactivo: 'Vehiculo Inactivo',
   kilometraje_alto: 'Kilometraje Alto',
   mantenimiento_pendiente: 'Mantenimiento Pendiente',
+  actualizar_kilometraje: 'Actualizar Kilometraje',
 };
 
 const coloresPorPrioridad: Record<PrioridadAlerta, string> = {

@@ -355,13 +355,99 @@ export async function generarAlertasDocumentos(): Promise<number> {
 }
 
 /**
+ * Genera alertas de recordatorio para actualizar kilometraje
+ * Se genera una alerta si han pasado 2 o mas dias desde la ultima actualizacion
+ */
+export async function generarAlertasActualizarKilometraje(): Promise<number> {
+  let alertasCreadas = 0;
+
+  // Obtener todos los vehiculos activos con su fecha de actualizacion de km
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { data: vehiculosData, error: errorVehiculos } = await (supabase as any)
+    .from('vehiculos')
+    .select('id, placa, marca, modelo, kilometraje, kilometraje_updated_at')
+    .eq('estado', 'activo');
+
+  if (errorVehiculos || !vehiculosData) {
+    console.error('Error fetching vehiculos para recordatorio km:', errorVehiculos);
+    return 0;
+  }
+
+  const vehiculos = vehiculosData as Array<{
+    id: string;
+    placa: string;
+    marca: string;
+    modelo: string;
+    kilometraje: number;
+    kilometraje_updated_at: string | null;
+  }>;
+
+  const ahora = new Date();
+  const dosDiasEnMs = 2 * 24 * 60 * 60 * 1000; // 2 dias en milisegundos
+
+  for (const vehiculo of vehiculos) {
+    // Si no tiene fecha de actualizacion, asumimos que necesita actualizar
+    const ultimaActualizacion = vehiculo.kilometraje_updated_at
+      ? new Date(vehiculo.kilometraje_updated_at)
+      : new Date(0); // Fecha muy antigua si no hay registro
+
+    const tiempoTranscurrido = ahora.getTime() - ultimaActualizacion.getTime();
+    const diasTranscurridos = Math.floor(tiempoTranscurrido / (24 * 60 * 60 * 1000));
+
+    // Solo crear alerta si han pasado 2+ dias
+    if (tiempoTranscurrido >= dosDiasEnMs) {
+      // Verificar si ya existe una alerta pendiente de este tipo para este vehiculo
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { data: alertaExistente } = await (supabase as any)
+        .from('alertas')
+        .select('id')
+        .eq('vehiculo_id', vehiculo.id)
+        .eq('tipo', 'actualizar_kilometraje')
+        .eq('estado', 'pendiente')
+        .single();
+
+      if (!alertaExistente) {
+        // Calcular prioridad basada en dias sin actualizar
+        let prioridad: 'alta' | 'media' | 'baja' = 'baja';
+        if (diasTranscurridos >= 7) {
+          prioridad = 'alta'; // Mas de una semana sin actualizar
+        } else if (diasTranscurridos >= 4) {
+          prioridad = 'media'; // 4-6 dias sin actualizar
+        }
+
+        const mensaje = vehiculo.kilometraje_updated_at
+          ? `Actualizar kilometraje - ${vehiculo.placa} (${diasTranscurridos} dias sin actualizar)`
+          : `Actualizar kilometraje - ${vehiculo.placa} (sin registro de actualizacion)`;
+
+        await crearAlerta({
+          vehiculo_id: vehiculo.id,
+          tipo: 'actualizar_kilometraje',
+          prioridad,
+          mensaje,
+          kilometraje_actual: vehiculo.kilometraje,
+        });
+
+        alertasCreadas++;
+      }
+    }
+  }
+
+  return alertasCreadas;
+}
+
+/**
  * Genera todas las alertas del sistema
  */
-export async function generarTodasLasAlertas(): Promise<{ mantenimientos: number; documentos: number }> {
-  const [mantenimientos, documentos] = await Promise.all([
+export async function generarTodasLasAlertas(): Promise<{
+  mantenimientos: number;
+  documentos: number;
+  kilometraje: number;
+}> {
+  const [mantenimientos, documentos, kilometraje] = await Promise.all([
     generarAlertasMantenimientoKm(),
     generarAlertasDocumentos(),
+    generarAlertasActualizarKilometraje(),
   ]);
 
-  return { mantenimientos, documentos };
+  return { mantenimientos, documentos, kilometraje };
 }
