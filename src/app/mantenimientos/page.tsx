@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { MainLayout } from '@/components/layout/MainLayout';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -21,11 +21,11 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
-import { mantenimientos } from '@/data/mantenimientos';
-import { vehiculos, getVehiculoById } from '@/data/vehiculos';
+import { getVehiculos } from '@/lib/queries/vehiculos';
+import { getMantenimientos, type MantenimientoConVehiculo } from '@/lib/queries/mantenimientos';
 import { getCategoriaInfo } from '@/data/tipos-mantenimiento';
-import { Plus, Search, Calendar, Wrench, Eye } from 'lucide-react';
-import { TipoMantenimiento } from '@/types';
+import { Plus, Search, Calendar, Wrench, Eye, Loader2 } from 'lucide-react';
+import type { TipoMantenimiento, VehiculoCompleto } from '@/types/database';
 import { formatNumber } from '@/lib/utils';
 import Link from 'next/link';
 
@@ -34,18 +34,35 @@ export default function MantenimientosPage() {
   const [filtroTipo, setFiltroTipo] = useState<TipoMantenimiento | 'todos'>('todos');
   const [filtroVehiculo, setFiltroVehiculo] = useState<string>('todos');
 
+  const [mantenimientos, setMantenimientos] = useState<MantenimientoConVehiculo[]>([]);
+  const [vehiculos, setVehiculos] = useState<VehiculoCompleto[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  // Cargar datos
+  useEffect(() => {
+    async function loadData() {
+      const [mantsData, vehsData] = await Promise.all([
+        getMantenimientos(),
+        getVehiculos(),
+      ]);
+      setMantenimientos(mantsData);
+      setVehiculos(vehsData);
+      setLoading(false);
+    }
+    loadData();
+  }, []);
+
   const mantenimientosFiltrados = mantenimientos
     .filter((m) => {
-      const vehiculo = getVehiculoById(m.vehiculoId);
       const categoriaInfo = getCategoriaInfo(m.categoria);
 
       const coincideBusqueda =
-        vehiculo?.placa.toLowerCase().includes(busqueda.toLowerCase()) ||
+        m.vehiculos?.placa.toLowerCase().includes(busqueda.toLowerCase()) ||
         categoriaInfo?.nombre.toLowerCase().includes(busqueda.toLowerCase()) ||
         m.descripcion.toLowerCase().includes(busqueda.toLowerCase());
 
       const coincideTipo = filtroTipo === 'todos' || m.tipo === filtroTipo;
-      const coincideVehiculo = filtroVehiculo === 'todos' || m.vehiculoId === filtroVehiculo;
+      const coincideVehiculo = filtroVehiculo === 'todos' || m.vehiculo_id === filtroVehiculo;
 
       return coincideBusqueda && coincideTipo && coincideVehiculo;
     })
@@ -67,7 +84,17 @@ export default function MantenimientosPage() {
     }).format(valor);
   };
 
-  const costoTotal = mantenimientosFiltrados.reduce((sum, m) => sum + m.costo, 0);
+  const costoTotal = mantenimientosFiltrados.reduce((sum, m) => sum + (m.costo || 0), 0);
+
+  if (loading) {
+    return (
+      <MainLayout title="Mantenimientos">
+        <div className="flex items-center justify-center py-20">
+          <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+        </div>
+      </MainLayout>
+    );
+  }
 
   return (
     <MainLayout title="Mantenimientos">
@@ -185,7 +212,6 @@ export default function MantenimientosPage() {
             </TableHeader>
             <TableBody>
               {mantenimientosFiltrados.map((m) => {
-                const vehiculo = getVehiculoById(m.vehiculoId);
                 const categoriaInfo = getCategoriaInfo(m.categoria);
 
                 return (
@@ -194,14 +220,14 @@ export default function MantenimientosPage() {
                       {formatearFecha(m.fecha)}
                     </TableCell>
                     <TableCell>
-                      {vehiculo ? (
+                      {m.vehiculos ? (
                         <Link
-                          href={`/vehiculos/${vehiculo.id}`}
+                          href={`/vehiculos/${m.vehiculo_id}`}
                           className="hover:underline"
                         >
-                          <span className="font-medium">{vehiculo.placa}</span>
+                          <span className="font-medium">{m.vehiculos.placa}</span>
                           <span className="text-muted-foreground ml-1">
-                            {vehiculo.marca}
+                            {m.vehiculos.marca}
                           </span>
                         </Link>
                       ) : (
@@ -218,7 +244,7 @@ export default function MantenimientosPage() {
                     <TableCell>{categoriaInfo?.nombre || m.categoria}</TableCell>
                     <TableCell>{formatNumber(m.kilometraje)} km</TableCell>
                     <TableCell className="text-right font-medium">
-                      {formatearPesos(m.costo)}
+                      {formatearPesos(m.costo || 0)}
                     </TableCell>
                     <TableCell>
                       <Button variant="ghost" size="icon">
@@ -238,8 +264,18 @@ export default function MantenimientosPage() {
                 No se encontraron mantenimientos
               </h3>
               <p className="mt-2 text-sm text-muted-foreground">
-                Intenta ajustar los filtros de busqueda
+                {mantenimientos.length === 0
+                  ? 'Registra el primer mantenimiento de tu flota'
+                  : 'Intenta ajustar los filtros de busqueda'}
               </p>
+              {mantenimientos.length === 0 && (
+                <Link href="/mantenimientos/nuevo" className="mt-4">
+                  <Button>
+                    <Plus className="h-4 w-4 mr-2" />
+                    Nuevo Mantenimiento
+                  </Button>
+                </Link>
+              )}
             </div>
           )}
         </CardContent>

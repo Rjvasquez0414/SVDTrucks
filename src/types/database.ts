@@ -18,30 +18,42 @@ export type PrioridadAlerta = 'alta' | 'media' | 'baja';
 export type EstadoAlerta = 'pendiente' | 'atendida' | 'descartada';
 export type RolUsuario = 'administrador' | 'operador';
 export type CategoriaMantenimiento =
-  | 'cambio_aceite'
-  | 'filtro_aceite'
-  | 'filtro_aire'
-  | 'filtro_combustible'
-  | 'liquido_refrigerante'
-  | 'liquido_frenos'
-  | 'pastillas_frenos'
-  | 'discos_frenos'
-  | 'rotacion_llantas'
-  | 'alineacion_balanceo'
-  | 'cambio_llantas'
-  | 'bandas_correas'
-  | 'bateria'
-  | 'transmision'
-  | 'suspension'
+  // Aceites y Filtros
+  | 'cambio_aceite_motor'        // Incluye aceite, filtros LF-9080, FS-1040, A-23A, refrigerante, engrase
+  | 'filtro_aire'                // Filtro de aire rancheros (2 unidades)
+  | 'filtro_agua'                // Filtro de agua
+  | 'filtro_trampa_acpm'         // Filtro trampa ACPM
+  | 'valvulina_transmision'      // Mobil 85w140 sintetica
+  | 'aceite_caja_cambios'        // Chevron sintetico Transfluid 50
+  // Llantas
+  | 'alineacion'                 // Alineacion
+  | 'rotacion_llantas'           // Rotacion llanta a llanta en misma pacha
+  | 'cambio_llantas_direccionales' // Llantas direccionales cabezote (95,000km)
+  | 'cambio_llantas_traccion'    // Llantas de traccion cabezote
+  | 'cambio_llantas_trailer'     // Llantas del trailer (anual)
+  // Suspension
+  | 'bujes_cabezote'             // Bujes del cabezote (10-11 meses)
+  | 'bujes_trailer'              // Bujes + retenedores + rodillos trailer (6-7 meses)
+  // Frenos
+  | 'revision_frenos'            // Revision bandas de frenado
+  // Motor
+  | 'reparacion_parcial_motor'   // Reparacion parcial (500,000km)
+  | 'reparacion_total_motor'     // Reparacion total (1,000,000km)
+  // Trailer especifico
+  | 'quinta_rueda'               // Tornamesa/quinta rueda
+  | 'manhole'                    // Cambio sello manhole
+  | 'conexiones_trailer'         // Manos (aire, luz, aire)
+  // Otros
   | 'sistema_electrico'
-  | 'reparacion_motor'
   | 'otro';
 export type TipoAlerta =
-  | 'mantenimiento_kilometraje'
-  | 'mantenimiento_tiempo'
-  | 'vencimiento_soat'
-  | 'vencimiento_tecnomecanica'
-  | 'vehiculo_inactivo';
+  | 'mantenimiento_kilometraje'   // Mantenimiento proximo por kilometraje
+  | 'mantenimiento_tiempo'        // Mantenimiento proximo por tiempo (meses)
+  | 'vencimiento_documento'       // Documento proximo a vencer
+  | 'documento_vencido'           // Documento ya vencido
+  | 'vehiculo_inactivo'           // Vehiculo sin actividad reciente
+  | 'kilometraje_alto'            // Vehiculo con kilometraje muy alto
+  | 'mantenimiento_pendiente';    // Mantenimiento que ya paso su fecha/km
 
 export type CategoriaDocumento = 'cabezote' | 'tanque' | 'conductor' | 'polizas';
 

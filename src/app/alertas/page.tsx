@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { MainLayout } from '@/components/layout/MainLayout';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -16,27 +16,41 @@ import {
   Eye,
   Check,
   X,
+  Loader2,
+  RefreshCw,
+  Wrench,
 } from 'lucide-react';
-import { getAlertasPendientes, contarAlertasPorPrioridad } from '@/data/alertas';
-import { getVehiculoById } from '@/data/vehiculos';
-import { Alerta, TipoAlerta, PrioridadAlerta } from '@/types';
+import {
+  getAlertasPendientes,
+  contarAlertasPorPrioridad,
+  marcarAlertaAtendida,
+  descartarAlerta,
+  generarTodasLasAlertas,
+  type AlertaConVehiculo,
+} from '@/lib/queries/alertas';
+import { useAuth } from '@/lib/auth-context';
+import type { TipoAlerta, PrioridadAlerta } from '@/types/database';
 import { cn, formatNumber } from '@/lib/utils';
 import Link from 'next/link';
 
 const iconosPorTipo: Record<TipoAlerta, typeof AlertTriangle> = {
-  mantenimiento_kilometraje: Truck,
+  mantenimiento_kilometraje: Wrench,
   mantenimiento_tiempo: Clock,
-  vencimiento_soat: FileWarning,
-  vencimiento_tecnomecanica: FileWarning,
+  vencimiento_documento: FileWarning,
+  documento_vencido: AlertTriangle,
   vehiculo_inactivo: Truck,
+  kilometraje_alto: Truck,
+  mantenimiento_pendiente: AlertTriangle,
 };
 
 const nombresTipo: Record<TipoAlerta, string> = {
   mantenimiento_kilometraje: 'Mantenimiento por Kilometraje',
   mantenimiento_tiempo: 'Mantenimiento por Tiempo',
-  vencimiento_soat: 'Vencimiento de SOAT',
-  vencimiento_tecnomecanica: 'Vencimiento Tecnicomecanica',
+  vencimiento_documento: 'Documento por Vencer',
+  documento_vencido: 'Documento Vencido',
   vehiculo_inactivo: 'Vehiculo Inactivo',
+  kilometraje_alto: 'Kilometraje Alto',
+  mantenimiento_pendiente: 'Mantenimiento Pendiente',
 };
 
 const coloresPorPrioridad: Record<PrioridadAlerta, string> = {
@@ -46,12 +60,76 @@ const coloresPorPrioridad: Record<PrioridadAlerta, string> = {
 };
 
 export default function AlertasPage() {
-  const alertas = getAlertasPendientes();
-  const conteo = contarAlertasPorPrioridad();
-  const [alertasLocales, setAlertasLocales] = useState(alertas);
+  const { usuario } = useAuth();
+  const [alertas, setAlertas] = useState<AlertaConVehiculo[]>([]);
+  const [conteo, setConteo] = useState({ alta: 0, media: 0, baja: 0 });
+  const [loading, setLoading] = useState(true);
+  const [generando, setGenerando] = useState(false);
+  const [procesando, setProcesando] = useState<string | null>(null);
 
-  const marcarAtendida = (id: string) => {
-    setAlertasLocales(alertasLocales.filter((a) => a.id !== id));
+  // Cargar alertas
+  const cargarAlertas = useCallback(async () => {
+    const [alertasData, conteoData] = await Promise.all([
+      getAlertasPendientes(),
+      contarAlertasPorPrioridad(),
+    ]);
+    setAlertas(alertasData);
+    setConteo(conteoData);
+    setLoading(false);
+  }, []);
+
+  useEffect(() => {
+    cargarAlertas();
+  }, [cargarAlertas]);
+
+  // Generar nuevas alertas
+  const handleGenerarAlertas = async () => {
+    setGenerando(true);
+    try {
+      const resultado = await generarTodasLasAlertas();
+      console.log('Alertas generadas:', resultado);
+      await cargarAlertas();
+    } catch (error) {
+      console.error('Error generando alertas:', error);
+    } finally {
+      setGenerando(false);
+    }
+  };
+
+  // Marcar como atendida
+  const handleMarcarAtendida = async (id: string) => {
+    setProcesando(id);
+    const exito = await marcarAlertaAtendida(id, usuario?.id);
+    if (exito) {
+      setAlertas(alertas.filter((a) => a.id !== id));
+      setConteo(prev => {
+        const alerta = alertas.find(a => a.id === id);
+        if (!alerta) return prev;
+        return {
+          ...prev,
+          [alerta.prioridad]: Math.max(0, prev[alerta.prioridad] - 1),
+        };
+      });
+    }
+    setProcesando(null);
+  };
+
+  // Descartar alerta
+  const handleDescartar = async (id: string) => {
+    setProcesando(id);
+    const exito = await descartarAlerta(id);
+    if (exito) {
+      setAlertas(alertas.filter((a) => a.id !== id));
+      setConteo(prev => {
+        const alerta = alertas.find(a => a.id === id);
+        if (!alerta) return prev;
+        return {
+          ...prev,
+          [alerta.prioridad]: Math.max(0, prev[alerta.prioridad] - 1),
+        };
+      });
+    }
+    setProcesando(null);
   };
 
   const formatearFecha = (fecha: string) => {
@@ -62,9 +140,9 @@ export default function AlertasPage() {
     });
   };
 
-  const AlertaCard = ({ alerta }: { alerta: Alerta }) => {
-    const vehiculo = getVehiculoById(alerta.vehiculoId);
-    const Icono = iconosPorTipo[alerta.tipo];
+  const AlertaCard = ({ alerta }: { alerta: AlertaConVehiculo }) => {
+    const Icono = iconosPorTipo[alerta.tipo] || AlertTriangle;
+    const isProcesando = procesando === alerta.id;
 
     return (
       <div
@@ -112,38 +190,38 @@ export default function AlertasPage() {
             </Badge>
           </div>
 
-          {vehiculo && (
+          {alerta.vehiculos && (
             <div className="flex items-center gap-2 text-sm text-muted-foreground">
               <Truck className="h-4 w-4" />
               <span>
-                {vehiculo.placa} - {vehiculo.marca} {vehiculo.modelo}
+                {alerta.vehiculos.placa} - {alerta.vehiculos.marca} {alerta.vehiculos.modelo}
               </span>
             </div>
           )}
 
-          {alerta.kilometrajeActual && alerta.kilometrajeLimite && (
+          {alerta.kilometraje_actual && alerta.kilometraje_limite && (
             <p className="text-sm text-muted-foreground">
-              Kilometraje actual: {formatNumber(alerta.kilometrajeActual)} km /
-              Limite: {formatNumber(alerta.kilometrajeLimite)} km
+              Kilometraje actual: {formatNumber(alerta.kilometraje_actual)} km /
+              Limite: {formatNumber(alerta.kilometraje_limite)} km
             </p>
           )}
 
-          {alerta.fechaLimite && (
+          {alerta.fecha_limite && (
             <p className="text-sm text-muted-foreground">
-              Fecha limite: {formatearFecha(alerta.fechaLimite)}
+              Fecha limite: {formatearFecha(alerta.fecha_limite)}
             </p>
           )}
 
           <div className="flex items-center gap-2 pt-2">
             <span className="text-xs text-muted-foreground">
-              Generada: {formatearFecha(alerta.fechaGenerada)}
+              Generada: {formatearFecha(alerta.fecha_generada)}
             </span>
           </div>
 
           <div className="flex items-center gap-2 pt-2">
-            {vehiculo && (
-              <Link href={`/vehiculos/${vehiculo.id}`}>
-                <Button variant="outline" size="sm">
+            {alerta.vehiculos && (
+              <Link href={`/vehiculos/${alerta.vehiculo_id}`}>
+                <Button variant="outline" size="sm" disabled={isProcesando}>
                   <Eye className="h-4 w-4 mr-1" />
                   Ver Vehiculo
                 </Button>
@@ -152,12 +230,24 @@ export default function AlertasPage() {
             <Button
               variant="outline"
               size="sm"
-              onClick={() => marcarAtendida(alerta.id)}
+              onClick={() => handleMarcarAtendida(alerta.id)}
+              disabled={isProcesando}
             >
-              <Check className="h-4 w-4 mr-1" />
-              Marcar Atendida
+              {isProcesando ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <>
+                  <Check className="h-4 w-4 mr-1" />
+                  Marcar Atendida
+                </>
+              )}
             </Button>
-            <Button variant="ghost" size="sm">
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => handleDescartar(alerta.id)}
+              disabled={isProcesando}
+            >
               <X className="h-4 w-4 mr-1" />
               Descartar
             </Button>
@@ -167,8 +257,44 @@ export default function AlertasPage() {
     );
   };
 
+  if (loading) {
+    return (
+      <MainLayout title="Centro de Alertas">
+        <div className="flex items-center justify-center py-20">
+          <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+        </div>
+      </MainLayout>
+    );
+  }
+
   return (
     <MainLayout title="Centro de Alertas">
+      {/* Header con boton de generar */}
+      <div className="flex items-center justify-between mb-6">
+        <div>
+          <p className="text-sm text-muted-foreground">
+            Alertas activas de mantenimientos y documentos
+          </p>
+        </div>
+        <Button
+          variant="outline"
+          onClick={handleGenerarAlertas}
+          disabled={generando}
+        >
+          {generando ? (
+            <>
+              <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+              Generando...
+            </>
+          ) : (
+            <>
+              <RefreshCw className="h-4 w-4 mr-2" />
+              Actualizar Alertas
+            </>
+          )}
+        </Button>
+      </div>
+
       {/* Summary cards */}
       <div className="grid gap-4 sm:grid-cols-3">
         <Card className="border-l-4 border-l-red-500">
@@ -212,7 +338,7 @@ export default function AlertasPage() {
       <Card className="mt-6">
         <CardHeader>
           <CardTitle className="text-base">
-            Alertas Pendientes ({alertasLocales.length})
+            Alertas Pendientes ({alertas.length})
           </CardTitle>
         </CardHeader>
         <CardContent>
@@ -220,28 +346,37 @@ export default function AlertasPage() {
             <TabsList>
               <TabsTrigger value="todas">Todas</TabsTrigger>
               <TabsTrigger value="alta">
-                Alta ({alertasLocales.filter((a) => a.prioridad === 'alta').length})
+                Alta ({alertas.filter((a) => a.prioridad === 'alta').length})
               </TabsTrigger>
               <TabsTrigger value="media">
-                Media ({alertasLocales.filter((a) => a.prioridad === 'media').length})
+                Media ({alertas.filter((a) => a.prioridad === 'media').length})
               </TabsTrigger>
               <TabsTrigger value="baja">
-                Baja ({alertasLocales.filter((a) => a.prioridad === 'baja').length})
+                Baja ({alertas.filter((a) => a.prioridad === 'baja').length})
               </TabsTrigger>
             </TabsList>
 
             <TabsContent value="todas" className="mt-4">
               <div className="space-y-4">
-                {alertasLocales.map((alerta) => (
+                {alertas.map((alerta) => (
                   <AlertaCard key={alerta.id} alerta={alerta} />
                 ))}
-                {alertasLocales.length === 0 && (
+                {alertas.length === 0 && (
                   <div className="flex flex-col items-center justify-center py-12 text-center">
                     <CheckCircle className="h-12 w-12 text-green-500" />
                     <h3 className="mt-4 text-lg font-semibold">Todo en orden</h3>
                     <p className="mt-2 text-sm text-muted-foreground">
                       No hay alertas pendientes por atender
                     </p>
+                    <Button
+                      variant="outline"
+                      className="mt-4"
+                      onClick={handleGenerarAlertas}
+                      disabled={generando}
+                    >
+                      <RefreshCw className="h-4 w-4 mr-2" />
+                      Verificar nuevas alertas
+                    </Button>
                   </div>
                 )}
               </div>
@@ -249,31 +384,46 @@ export default function AlertasPage() {
 
             <TabsContent value="alta" className="mt-4">
               <div className="space-y-4">
-                {alertasLocales
+                {alertas
                   .filter((a) => a.prioridad === 'alta')
                   .map((alerta) => (
                     <AlertaCard key={alerta.id} alerta={alerta} />
                   ))}
+                {alertas.filter((a) => a.prioridad === 'alta').length === 0 && (
+                  <p className="text-center text-muted-foreground py-8">
+                    No hay alertas de prioridad alta
+                  </p>
+                )}
               </div>
             </TabsContent>
 
             <TabsContent value="media" className="mt-4">
               <div className="space-y-4">
-                {alertasLocales
+                {alertas
                   .filter((a) => a.prioridad === 'media')
                   .map((alerta) => (
                     <AlertaCard key={alerta.id} alerta={alerta} />
                   ))}
+                {alertas.filter((a) => a.prioridad === 'media').length === 0 && (
+                  <p className="text-center text-muted-foreground py-8">
+                    No hay alertas de prioridad media
+                  </p>
+                )}
               </div>
             </TabsContent>
 
             <TabsContent value="baja" className="mt-4">
               <div className="space-y-4">
-                {alertasLocales
+                {alertas
                   .filter((a) => a.prioridad === 'baja')
                   .map((alerta) => (
                     <AlertaCard key={alerta.id} alerta={alerta} />
                   ))}
+                {alertas.filter((a) => a.prioridad === 'baja').length === 0 && (
+                  <p className="text-center text-muted-foreground py-8">
+                    No hay alertas de prioridad baja
+                  </p>
+                )}
               </div>
             </TabsContent>
           </Tabs>

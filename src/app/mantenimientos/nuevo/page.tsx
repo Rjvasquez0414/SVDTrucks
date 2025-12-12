@@ -1,11 +1,12 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { MainLayout } from '@/components/layout/MainLayout';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { Badge } from '@/components/ui/badge';
 import {
   Select,
   SelectContent,
@@ -14,12 +15,24 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { Separator } from '@/components/ui/separator';
-import { vehiculos } from '@/data/vehiculos';
-import { catalogoMantenimiento } from '@/data/tipos-mantenimiento';
-import { ArrowLeft, Save, Plus, X } from 'lucide-react';
+import { getVehiculos } from '@/lib/queries/vehiculos';
+import {
+  catalogoMantenimiento,
+  getCategoriaInfo,
+  calcularProximoKm,
+  calcularProximaFecha,
+} from '@/data/tipos-mantenimiento';
+import {
+  createMantenimiento,
+  createRepuestos,
+  actualizarKilometrajeVehiculo,
+} from '@/lib/queries/mantenimientos';
+import { ArrowLeft, Save, Plus, X, Loader2, Info } from 'lucide-react';
 import { formatNumber } from '@/lib/utils';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
+import { useAuth } from '@/lib/auth-context';
+import type { VehiculoCompleto, CategoriaMantenimiento, TipoMantenimiento } from '@/types/database';
 
 interface Repuesto {
   nombre: string;
@@ -29,9 +42,12 @@ interface Repuesto {
 
 export default function NuevoMantenimientoPage() {
   const router = useRouter();
+  const { usuario } = useAuth();
+
+  // Estados del formulario
   const [vehiculoId, setVehiculoId] = useState('');
-  const [tipo, setTipo] = useState<'preventivo' | 'correctivo'>('preventivo');
-  const [categoria, setCategoria] = useState('');
+  const [tipo, setTipo] = useState<TipoMantenimiento>('preventivo');
+  const [categoria, setCategoria] = useState<CategoriaMantenimiento | ''>('');
   const [descripcion, setDescripcion] = useState('');
   const [fecha, setFecha] = useState(new Date().toISOString().split('T')[0]);
   const [kilometraje, setKilometraje] = useState('');
@@ -39,8 +55,51 @@ export default function NuevoMantenimientoPage() {
   const [observaciones, setObservaciones] = useState('');
   const [repuestos, setRepuestos] = useState<Repuesto[]>([]);
 
+  // Estados de carga
+  const [vehiculos, setVehiculos] = useState<VehiculoCompleto[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  // Cargar vehiculos al inicio
+  useEffect(() => {
+    async function loadVehiculos() {
+      const data = await getVehiculos();
+      setVehiculos(data);
+      setLoading(false);
+    }
+    loadVehiculos();
+  }, []);
+
   const vehiculoSeleccionado = vehiculos.find((v) => v.id === vehiculoId);
   const categoriasFiltradas = catalogoMantenimiento.filter((c) => c.tipo === tipo);
+  const categoriaInfo = categoria ? getCategoriaInfo(categoria) : null;
+
+  // Auto-rellenar descripcion cuando se selecciona categoria
+  useEffect(() => {
+    if (categoriaInfo && !descripcion) {
+      setDescripcion(categoriaInfo.descripcion);
+    }
+  }, [categoriaInfo, descripcion]);
+
+  // Auto-rellenar kilometraje con el actual del vehiculo
+  useEffect(() => {
+    if (vehiculoSeleccionado && !kilometraje) {
+      setKilometraje(vehiculoSeleccionado.kilometraje.toString());
+    }
+  }, [vehiculoSeleccionado, kilometraje]);
+
+  // Agregar insumos tipicos como repuestos
+  const agregarInsumosTipicos = () => {
+    if (categoriaInfo?.insumosTipicos) {
+      const nuevosRepuestos = categoriaInfo.insumosTipicos.map((insumo) => ({
+        nombre: insumo,
+        cantidad: 1,
+        costoUnitario: 0,
+      }));
+      setRepuestos([...repuestos, ...nuevosRepuestos]);
+    }
+  };
 
   const agregarRepuesto = () => {
     setRepuestos([...repuestos, { nombre: '', cantidad: 1, costoUnitario: 0 }]);
@@ -61,11 +120,72 @@ export default function NuevoMantenimientoPage() {
     0
   );
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    // En un prototipo, simplemente mostramos alerta y redirigimos
-    alert('Mantenimiento registrado exitosamente (simulacion)');
-    router.push('/mantenimientos');
+    setError(null);
+
+    if (!vehiculoId || !categoria || !kilometraje) {
+      setError('Por favor completa todos los campos requeridos');
+      return;
+    }
+
+    setSubmitting(true);
+
+    try {
+      const kmActual = parseInt(kilometraje);
+
+      // Calcular proximo mantenimiento
+      const proximoKm = calcularProximoKm(categoria, kmActual);
+      const proximaFecha = calcularProximaFecha(categoria, fecha);
+
+      // Crear el mantenimiento
+      const mantenimiento = await createMantenimiento({
+        vehiculo_id: vehiculoId,
+        tipo,
+        categoria,
+        descripcion,
+        fecha,
+        kilometraje: kmActual,
+        costo: costoRepuestos,
+        proveedor: proveedor || null,
+        observaciones: observaciones || null,
+        proximo_km: proximoKm,
+        proxima_fecha: proximaFecha?.toISOString().split('T')[0] || null,
+        created_by: usuario?.id || null,
+      });
+
+      if (!mantenimiento) {
+        throw new Error('Error al crear el mantenimiento');
+      }
+
+      // Crear repuestos si hay
+      if (repuestos.length > 0) {
+        const repuestosData = repuestos
+          .filter((r) => r.nombre.trim())
+          .map((r) => ({
+            mantenimiento_id: mantenimiento.id,
+            nombre: r.nombre,
+            cantidad: r.cantidad,
+            costo_unitario: r.costoUnitario,
+          }));
+
+        if (repuestosData.length > 0) {
+          await createRepuestos(repuestosData);
+        }
+      }
+
+      // Actualizar kilometraje del vehiculo si es mayor
+      if (vehiculoSeleccionado && kmActual > vehiculoSeleccionado.kilometraje) {
+        await actualizarKilometrajeVehiculo(vehiculoId, kmActual);
+      }
+
+      router.push('/mantenimientos');
+    } catch (err) {
+      console.error('Error:', err);
+      setError(err instanceof Error ? err.message : 'Error al guardar el mantenimiento');
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   const formatearPesos = (valor: number) => {
@@ -75,6 +195,16 @@ export default function NuevoMantenimientoPage() {
       minimumFractionDigits: 0,
     }).format(valor);
   };
+
+  if (loading) {
+    return (
+      <MainLayout title="Nuevo Mantenimiento">
+        <div className="flex items-center justify-center py-20">
+          <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+        </div>
+      </MainLayout>
+    );
+  }
 
   return (
     <MainLayout title="Nuevo Mantenimiento">
@@ -92,6 +222,12 @@ export default function NuevoMantenimientoPage() {
         <div className="grid gap-6 lg:grid-cols-3">
           {/* Main form */}
           <div className="lg:col-span-2 space-y-6">
+            {error && (
+              <div className="rounded-md bg-destructive/10 p-4 text-destructive">
+                {error}
+              </div>
+            )}
+
             {/* Información básica */}
             <Card>
               <CardHeader>
@@ -120,8 +256,9 @@ export default function NuevoMantenimientoPage() {
                     <Select
                       value={tipo}
                       onValueChange={(value) => {
-                        setTipo(value as 'preventivo' | 'correctivo');
+                        setTipo(value as TipoMantenimiento);
                         setCategoria('');
+                        setDescripcion('');
                       }}
                     >
                       <SelectTrigger id="tipo">
@@ -138,14 +275,34 @@ export default function NuevoMantenimientoPage() {
                 <div className="grid gap-4 sm:grid-cols-2">
                   <div className="space-y-2">
                     <Label htmlFor="categoria">Categoria *</Label>
-                    <Select value={categoria} onValueChange={setCategoria} required>
+                    <Select
+                      value={categoria}
+                      onValueChange={(value) => {
+                        setCategoria(value as CategoriaMantenimiento);
+                        setDescripcion('');
+                        setRepuestos([]);
+                      }}
+                      required
+                    >
                       <SelectTrigger id="categoria">
                         <SelectValue placeholder="Seleccionar categoria" />
                       </SelectTrigger>
                       <SelectContent>
                         {categoriasFiltradas.map((c) => (
                           <SelectItem key={c.categoria} value={c.categoria}>
-                            {c.nombre}
+                            <div className="flex items-center gap-2">
+                              <span>{c.nombre}</span>
+                              {c.intervaloKm && (
+                                <Badge variant="outline" className="text-xs">
+                                  {formatNumber(c.intervaloKm)} km
+                                </Badge>
+                              )}
+                              {c.intervaloMeses && (
+                                <Badge variant="outline" className="text-xs">
+                                  {c.intervaloMeses} meses
+                                </Badge>
+                              )}
+                            </div>
                           </SelectItem>
                         ))}
                       </SelectContent>
@@ -163,6 +320,32 @@ export default function NuevoMantenimientoPage() {
                     />
                   </div>
                 </div>
+
+                {/* Info de la categoria seleccionada */}
+                {categoriaInfo && (
+                  <div className="rounded-lg border bg-muted/50 p-4 space-y-2">
+                    <div className="flex items-center gap-2 text-sm font-medium">
+                      <Info className="h-4 w-4" />
+                      {categoriaInfo.nombre}
+                    </div>
+                    <p className="text-sm text-muted-foreground">{categoriaInfo.descripcion}</p>
+                    <div className="flex flex-wrap gap-2">
+                      {categoriaInfo.intervaloKm && (
+                        <Badge variant="secondary">
+                          Intervalo: {formatNumber(categoriaInfo.intervaloKm)} km
+                        </Badge>
+                      )}
+                      {categoriaInfo.intervaloMeses && (
+                        <Badge variant="secondary">
+                          Intervalo: {categoriaInfo.intervaloMeses} meses
+                        </Badge>
+                      )}
+                      <Badge variant="outline">
+                        Aplica a: {categoriaInfo.aplicaA === 'ambos' ? 'Cabezote y Trailer' : categoriaInfo.aplicaA}
+                      </Badge>
+                    </div>
+                  </div>
+                )}
 
                 <div className="grid gap-4 sm:grid-cols-2">
                   <div className="space-y-2">
@@ -219,11 +402,24 @@ export default function NuevoMantenimientoPage() {
             {/* Repuestos */}
             <Card>
               <CardHeader className="flex flex-row items-center justify-between">
-                <CardTitle className="text-base">Repuestos Utilizados</CardTitle>
-                <Button type="button" variant="outline" size="sm" onClick={agregarRepuesto}>
-                  <Plus className="h-4 w-4 mr-2" />
-                  Agregar
-                </Button>
+                <CardTitle className="text-base">Repuestos e Insumos</CardTitle>
+                <div className="flex gap-2">
+                  {categoriaInfo?.insumosTipicos && (
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={agregarInsumosTipicos}
+                    >
+                      <Plus className="h-4 w-4 mr-2" />
+                      Agregar Insumos Tipicos
+                    </Button>
+                  )}
+                  <Button type="button" variant="outline" size="sm" onClick={agregarRepuesto}>
+                    <Plus className="h-4 w-4 mr-2" />
+                    Agregar
+                  </Button>
+                </div>
               </CardHeader>
               <CardContent>
                 {repuestos.length > 0 ? (
@@ -299,6 +495,12 @@ export default function NuevoMantenimientoPage() {
                       <span className="text-muted-foreground">Vehiculo</span>
                       <span className="font-medium">{vehiculoSeleccionado.placa}</span>
                     </div>
+                    <div className="flex justify-between text-sm">
+                      <span className="text-muted-foreground">Km Actual</span>
+                      <span className="font-medium">
+                        {formatNumber(vehiculoSeleccionado.kilometraje)} km
+                      </span>
+                    </div>
                     <Separator />
                   </>
                 )}
@@ -306,6 +508,12 @@ export default function NuevoMantenimientoPage() {
                   <span className="text-muted-foreground">Tipo</span>
                   <span className="font-medium capitalize">{tipo}</span>
                 </div>
+                {categoriaInfo && (
+                  <div className="flex justify-between text-sm">
+                    <span className="text-muted-foreground">Categoria</span>
+                    <span className="font-medium">{categoriaInfo.nombre}</span>
+                  </div>
+                )}
                 <Separator />
                 <div className="flex justify-between text-sm">
                   <span className="text-muted-foreground">Repuestos</span>
@@ -321,13 +529,46 @@ export default function NuevoMantenimientoPage() {
                   <span className="font-medium">Total Estimado</span>
                   <span className="font-bold text-lg">{formatearPesos(costoRepuestos)}</span>
                 </div>
+
+                {/* Proximo mantenimiento */}
+                {categoriaInfo && kilometraje && (
+                  <>
+                    <Separator />
+                    <div className="text-sm space-y-1">
+                      <span className="text-muted-foreground">Proximo mantenimiento:</span>
+                      {categoriaInfo.intervaloKm && (
+                        <p className="font-medium">
+                          {formatNumber(calcularProximoKm(categoria as CategoriaMantenimiento, parseInt(kilometraje)) || 0)} km
+                        </p>
+                      )}
+                      {categoriaInfo.intervaloMeses && (
+                        <p className="font-medium">
+                          {calcularProximaFecha(categoria as CategoriaMantenimiento, fecha)?.toLocaleDateString('es-CO', {
+                            year: 'numeric',
+                            month: 'long',
+                            day: 'numeric',
+                          })}
+                        </p>
+                      )}
+                    </div>
+                  </>
+                )}
               </CardContent>
             </Card>
 
             <div className="flex flex-col gap-2">
-              <Button type="submit" className="w-full">
-                <Save className="h-4 w-4 mr-2" />
-                Guardar Mantenimiento
+              <Button type="submit" className="w-full" disabled={submitting}>
+                {submitting ? (
+                  <>
+                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                    Guardando...
+                  </>
+                ) : (
+                  <>
+                    <Save className="h-4 w-4 mr-2" />
+                    Guardar Mantenimiento
+                  </>
+                )}
               </Button>
               <Button type="button" variant="outline" className="w-full" asChild>
                 <Link href="/mantenimientos">Cancelar</Link>

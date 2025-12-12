@@ -1,14 +1,16 @@
 'use client';
 
+import { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Progress } from '@/components/ui/progress';
-import { ArrowRight, Wrench } from 'lucide-react';
-import { vehiculos } from '@/data/vehiculos';
-import { mantenimientos } from '@/data/mantenimientos';
+import { ArrowRight, Wrench, Loader2 } from 'lucide-react';
+import { getVehiculos } from '@/lib/queries/vehiculos';
+import { getMantenimientos, type MantenimientoConVehiculo } from '@/lib/queries/mantenimientos';
 import { getCategoriaInfo } from '@/data/tipos-mantenimiento';
 import { formatNumber } from '@/lib/utils';
+import type { VehiculoCompleto } from '@/types/database';
 import Link from 'next/link';
 
 interface ProximoMantenimiento {
@@ -23,20 +25,23 @@ interface ProximoMantenimiento {
   progreso: number;
 }
 
-function calcularProximosMantenimientos(): ProximoMantenimiento[] {
+function calcularProximosMantenimientos(
+  vehiculos: VehiculoCompleto[],
+  mantenimientos: MantenimientoConVehiculo[]
+): ProximoMantenimiento[] {
   const proximos: ProximoMantenimiento[] = [];
 
   vehiculos.forEach((vehiculo) => {
     if (vehiculo.estado === 'inactivo') return;
 
     const mantenimientosVehiculo = mantenimientos.filter(
-      (m) => m.vehiculoId === vehiculo.id && m.proximoMantenimiento?.kilometraje
+      (m) => m.vehiculo_id === vehiculo.id && m.proximo_km
     );
 
     mantenimientosVehiculo.forEach((m) => {
-      if (!m.proximoMantenimiento?.kilometraje) return;
+      if (!m.proximo_km) return;
 
-      const kmRestantes = m.proximoMantenimiento.kilometraje - vehiculo.kilometraje;
+      const kmRestantes = m.proximo_km - vehiculo.kilometraje;
       if (kmRestantes < 5000 && kmRestantes > -2000) {
         const categoriaInfo = getCategoriaInfo(m.categoria);
         const intervalo = categoriaInfo?.intervaloKm || 15000;
@@ -51,7 +56,7 @@ function calcularProximosMantenimientos(): ProximoMantenimiento[] {
           categoria: m.categoria,
           categoriaNombre: categoriaInfo?.nombre || m.categoria,
           kilometrajeActual: vehiculo.kilometraje,
-          kilometrajeLimite: m.proximoMantenimiento.kilometraje,
+          kilometrajeLimite: m.proximo_km,
           progreso,
         });
       }
@@ -64,7 +69,36 @@ function calcularProximosMantenimientos(): ProximoMantenimiento[] {
 }
 
 export function ProximosMantenimientos() {
-  const proximos = calcularProximosMantenimientos();
+  const [proximos, setProximos] = useState<ProximoMantenimiento[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    async function loadData() {
+      const [vehiculos, mantenimientos] = await Promise.all([
+        getVehiculos(),
+        getMantenimientos(),
+      ]);
+      const proximosCalculados = calcularProximosMantenimientos(vehiculos, mantenimientos);
+      setProximos(proximosCalculados);
+      setLoading(false);
+    }
+    loadData();
+  }, []);
+
+  if (loading) {
+    return (
+      <Card className="h-full">
+        <CardHeader className="flex flex-row items-center justify-between pb-2">
+          <CardTitle className="text-base font-semibold">Proximos Mantenimientos</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="flex items-center justify-center py-8">
+            <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+          </div>
+        </CardContent>
+      </Card>
+    );
+  }
 
   return (
     <Card className="h-full">
