@@ -7,6 +7,14 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
+import {
   Select,
   SelectContent,
   SelectItem,
@@ -26,9 +34,12 @@ import {
   Plus,
   Loader2,
   Calendar,
+  Eye,
+  Trash2,
 } from 'lucide-react';
 import { getVehiculos } from '@/lib/queries/vehiculos';
-import { getDocumentosCompletos } from '@/lib/queries/documentos';
+import { getDocumentosCompletos, deleteDocumento } from '@/lib/queries/documentos';
+import { supabase } from '@/lib/supabase';
 import { VehiculoCompleto, Documento, TipoDocumento, CategoriaDocumento, EstadoDocumento } from '@/types/database';
 import { cn } from '@/lib/utils';
 import { DocumentoModal } from '@/components/documentos/DocumentoModal';
@@ -88,6 +99,8 @@ function DocumentoCard({
   estado,
   documento,
   onAgregar,
+  onEliminar,
+  onPrevisualizar,
 }: {
   nombre: string;
   tipo: TipoDocumento;
@@ -95,6 +108,8 @@ function DocumentoCard({
   estado: EstadoDocumento;
   documento?: Documento | null;
   onAgregar: () => void;
+  onEliminar?: () => void;
+  onPrevisualizar?: () => void;
 }) {
   const estadoConfig = {
     vigente: {
@@ -131,6 +146,8 @@ function DocumentoCard({
     });
   };
 
+  const tieneArchivo = documento?.archivo_url;
+
   return (
     <div className="flex items-center justify-between rounded-lg border p-4 transition-colors hover:bg-muted/50">
       <div className="flex items-center gap-3">
@@ -143,9 +160,9 @@ function DocumentoCard({
             <Calendar className="h-3 w-3" />
             Vence: {formatearFecha(fechaVencimiento)}
           </p>
-          {documento?.entidad_emisora && (
+          {documento?.archivo_nombre && (
             <p className="text-xs text-muted-foreground">
-              {documento.entidad_emisora}
+              PDF: {documento.archivo_nombre}
             </p>
           )}
         </div>
@@ -157,10 +174,33 @@ function DocumentoCard({
             Agregar
           </Button>
         ) : (
-          <Badge className={cn('gap-1', config.color)} variant="outline">
-            <Icon className="h-3 w-3" />
-            {config.label}
-          </Badge>
+          <>
+            <Badge className={cn('gap-1', config.color)} variant="outline">
+              <Icon className="h-3 w-3" />
+              {config.label}
+            </Badge>
+            {tieneArchivo && onPrevisualizar && (
+              <Button
+                size="sm"
+                variant="ghost"
+                onClick={onPrevisualizar}
+                title="Ver documento"
+              >
+                <Eye className="h-4 w-4" />
+              </Button>
+            )}
+            {onEliminar && (
+              <Button
+                size="sm"
+                variant="ghost"
+                onClick={onEliminar}
+                className="text-destructive hover:text-destructive hover:bg-destructive/10"
+                title="Eliminar documento"
+              >
+                <Trash2 className="h-4 w-4" />
+              </Button>
+            )}
+          </>
         )}
       </div>
     </div>
@@ -175,6 +215,8 @@ function CategoriaDocumentos({
   documentosRegistrados,
   entidadNombre,
   onAgregarDocumento,
+  onEliminarDocumento,
+  onPrevisualizarDocumento,
 }: {
   titulo: string;
   icon: typeof Truck;
@@ -182,6 +224,8 @@ function CategoriaDocumentos({
   documentosRegistrados: Documento[];
   entidadNombre?: string;
   onAgregarDocumento: (tipo: TipoDocumento) => void;
+  onEliminarDocumento: (documento: Documento) => void;
+  onPrevisualizarDocumento: (documento: Documento) => void;
 }) {
   return (
     <Card>
@@ -213,6 +257,8 @@ function CategoriaDocumentos({
               estado={estado}
               documento={docRegistrado}
               onAgregar={() => onAgregarDocumento(tipoDoc.tipo)}
+              onEliminar={docRegistrado ? () => onEliminarDocumento(docRegistrado) : undefined}
+              onPrevisualizar={docRegistrado?.archivo_url ? () => onPrevisualizarDocumento(docRegistrado) : undefined}
             />
           );
         })}
@@ -232,6 +278,13 @@ export default function DocumentacionPage() {
   const [modalOpen, setModalOpen] = useState(false);
   const [modalCategoria, setModalCategoria] = useState<CategoriaDocumento>('cabezote');
   const [modalTipoPreseleccionado, setModalTipoPreseleccionado] = useState<TipoDocumento | undefined>();
+
+  // Estado para eliminar documento
+  const [documentoAEliminar, setDocumentoAEliminar] = useState<Documento | null>(null);
+  const [eliminando, setEliminando] = useState(false);
+
+  // Estado para previsualizar documento
+  const [documentoPreview, setDocumentoPreview] = useState<Documento | null>(null);
 
   const vehiculoSeleccionado = vehiculos.find((v) => v.id === selectedVehiculo);
 
@@ -285,6 +338,42 @@ export default function DocumentacionPage() {
     setModalCategoria(categoria);
     setModalTipoPreseleccionado(tipo);
     setModalOpen(true);
+  };
+
+  // Eliminar documento
+  const handleEliminarDocumento = async () => {
+    if (!documentoAEliminar) return;
+
+    setEliminando(true);
+    try {
+      // Si tiene archivo en storage, eliminarlo tambien
+      if (documentoAEliminar.archivo_url) {
+        // Extraer el path del archivo de la URL
+        const urlParts = documentoAEliminar.archivo_url.split('/documentos/');
+        if (urlParts.length > 1) {
+          const filePath = urlParts[1];
+          await supabase.storage.from('documentos').remove([filePath]);
+        }
+      }
+
+      // Eliminar el registro de la base de datos
+      await deleteDocumento(documentoAEliminar.id);
+
+      // Recargar documentos
+      await cargarDocumentos();
+      setDocumentoAEliminar(null);
+    } catch (error) {
+      console.error('Error eliminando documento:', error);
+    } finally {
+      setEliminando(false);
+    }
+  };
+
+  // Previsualizar documento
+  const handlePrevisualizarDocumento = (documento: Documento) => {
+    if (documento.archivo_url) {
+      setDocumentoPreview(documento);
+    }
   };
 
   // Calcular resumen de estados
@@ -440,6 +529,8 @@ export default function DocumentacionPage() {
             documentosRegistrados={getDocumentosPorCategoria('cabezote')}
             entidadNombre={vehiculoSeleccionado?.placa}
             onAgregarDocumento={(tipo) => handleAgregarDocumento('cabezote', tipo)}
+            onEliminarDocumento={(doc) => setDocumentoAEliminar(doc)}
+            onPrevisualizarDocumento={handlePrevisualizarDocumento}
           />
         </TabsContent>
 
@@ -451,6 +542,8 @@ export default function DocumentacionPage() {
             documentosRegistrados={getDocumentosPorCategoria('tanque')}
             entidadNombre={vehiculoSeleccionado?.remolques?.placa || 'Sin asignar'}
             onAgregarDocumento={(tipo) => handleAgregarDocumento('tanque', tipo)}
+            onEliminarDocumento={(doc) => setDocumentoAEliminar(doc)}
+            onPrevisualizarDocumento={handlePrevisualizarDocumento}
           />
         </TabsContent>
 
@@ -462,6 +555,8 @@ export default function DocumentacionPage() {
             documentosRegistrados={getDocumentosPorCategoria('conductor')}
             entidadNombre={vehiculoSeleccionado?.conductores?.nombre || 'Sin asignar'}
             onAgregarDocumento={(tipo) => handleAgregarDocumento('conductor', tipo)}
+            onEliminarDocumento={(doc) => setDocumentoAEliminar(doc)}
+            onPrevisualizarDocumento={handlePrevisualizarDocumento}
           />
         </TabsContent>
 
@@ -472,6 +567,8 @@ export default function DocumentacionPage() {
             tiposDocumentos={documentosPorCategoria.polizas}
             documentosRegistrados={getDocumentosPorCategoria('polizas')}
             onAgregarDocumento={(tipo) => handleAgregarDocumento('polizas', tipo)}
+            onEliminarDocumento={(doc) => setDocumentoAEliminar(doc)}
+            onPrevisualizarDocumento={handlePrevisualizarDocumento}
           />
         </TabsContent>
       </Tabs>
@@ -536,6 +633,69 @@ export default function DocumentacionPage() {
           tipoPreseleccionado={modalTipoPreseleccionado}
         />
       )}
+
+      {/* Modal de confirmacion para eliminar */}
+      <Dialog open={!!documentoAEliminar} onOpenChange={(open) => !open && setDocumentoAEliminar(null)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Eliminar Documento</DialogTitle>
+            <DialogDescription>
+              Estas seguro de que deseas eliminar el documento &quot;{documentoAEliminar?.nombre}&quot;?
+              Esta accion no se puede deshacer.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => setDocumentoAEliminar(null)}
+              disabled={eliminando}
+            >
+              Cancelar
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={handleEliminarDocumento}
+              disabled={eliminando}
+            >
+              {eliminando ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Eliminando...
+                </>
+              ) : (
+                <>
+                  <Trash2 className="mr-2 h-4 w-4" />
+                  Eliminar
+                </>
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Modal de previsualizacion de PDF */}
+      <Dialog open={!!documentoPreview} onOpenChange={(open) => !open && setDocumentoPreview(null)}>
+        <DialogContent className="max-w-4xl h-[85vh]">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <FileText className="h-5 w-5" />
+              {documentoPreview?.nombre}
+            </DialogTitle>
+            <DialogDescription>
+              {documentoPreview?.archivo_nombre}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="flex-1 min-h-0 -mx-6 -mb-6">
+            {documentoPreview?.archivo_url && (
+              <iframe
+                src={documentoPreview.archivo_url}
+                className="w-full h-full border-0 rounded-b-lg"
+                title={documentoPreview.nombre}
+              />
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
     </MainLayout>
   );
 }
