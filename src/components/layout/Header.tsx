@@ -1,5 +1,6 @@
 'use client';
 
+import { useState, useEffect } from 'react';
 import { Bell, Search, User, LogOut, Settings } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -13,7 +14,7 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
-import { getAlertasPendientes } from '@/data/alertas';
+import { contarAlertasPorPrioridad } from '@/lib/queries/alertas';
 import { useAuth } from '@/lib/auth-context';
 import Link from 'next/link';
 
@@ -23,8 +24,18 @@ interface HeaderProps {
 
 export function Header({ title }: HeaderProps) {
   const { usuario, logout } = useAuth();
-  const alertasPendientes = getAlertasPendientes();
-  const alertasAltas = alertasPendientes.filter((a) => a.prioridad === 'alta').length;
+  const [alertasCount, setAlertasCount] = useState({ alta: 0, media: 0, baja: 0 });
+
+  useEffect(() => {
+    async function loadAlertas() {
+      const counts = await contarAlertasPorPrioridad();
+      setAlertasCount(counts);
+    }
+    loadAlertas();
+  }, []);
+
+  const totalAlertas = alertasCount.alta + alertasCount.media + alertasCount.baja;
+  const alertasAltas = alertasCount.alta;
 
   // Obtener iniciales del nombre
   const getInitials = (nombre: string) => {
@@ -57,12 +68,12 @@ export function Header({ title }: HeaderProps) {
         <Link href="/alertas">
           <Button variant="ghost" size="icon" className="relative">
             <Bell className="h-5 w-5" />
-            {alertasPendientes.length > 0 && (
+            {totalAlertas > 0 && (
               <Badge
                 variant={alertasAltas > 0 ? 'destructive' : 'secondary'}
                 className="absolute -right-1 -top-1 h-5 w-5 rounded-full p-0 text-xs flex items-center justify-center"
               >
-                {alertasPendientes.length}
+                {totalAlertas}
               </Badge>
             )}
           </Button>
