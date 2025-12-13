@@ -27,9 +27,11 @@ import {
   createRepuestos,
   actualizarKilometrajeVehiculo,
 } from '@/lib/queries/mantenimientos';
-import { ArrowLeft, Save, Plus, X, Loader2, Info } from 'lucide-react';
+import { ArrowLeft, Save, Plus, X, Loader2, Info, ImagePlus, Trash2 } from 'lucide-react';
 import { formatNumber } from '@/lib/utils';
+import { supabase } from '@/lib/supabase';
 import Link from 'next/link';
+import Image from 'next/image';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/lib/auth-context';
 import type { VehiculoCompleto, CategoriaMantenimiento, TipoMantenimiento } from '@/types/database';
@@ -37,7 +39,7 @@ import type { VehiculoCompleto, CategoriaMantenimiento, TipoMantenimiento } from
 interface Repuesto {
   nombre: string;
   cantidad: number;
-  costoUnitario: number;
+  costoTotal: number;
 }
 
 export default function NuevoMantenimientoPage() {
@@ -54,6 +56,8 @@ export default function NuevoMantenimientoPage() {
   const [proveedor, setProveedor] = useState('');
   const [observaciones, setObservaciones] = useState('');
   const [repuestos, setRepuestos] = useState<Repuesto[]>([]);
+  const [imagenes, setImagenes] = useState<File[]>([]);
+  const [imagenesPreview, setImagenesPreview] = useState<string[]>([]);
 
   // Estados de carga
   const [vehiculos, setVehiculos] = useState<VehiculoCompleto[]>([]);
@@ -95,14 +99,14 @@ export default function NuevoMantenimientoPage() {
       const nuevosRepuestos = categoriaInfo.insumosTipicos.map((insumo) => ({
         nombre: insumo,
         cantidad: 1,
-        costoUnitario: 0,
+        costoTotal: 0,
       }));
       setRepuestos([...repuestos, ...nuevosRepuestos]);
     }
   };
 
   const agregarRepuesto = () => {
-    setRepuestos([...repuestos, { nombre: '', cantidad: 1, costoUnitario: 0 }]);
+    setRepuestos([...repuestos, { nombre: '', cantidad: 1, costoTotal: 0 }]);
   };
 
   const actualizarRepuesto = (index: number, field: keyof Repuesto, value: string | number) => {
@@ -116,9 +120,57 @@ export default function NuevoMantenimientoPage() {
   };
 
   const costoRepuestos = repuestos.reduce(
-    (sum, r) => sum + r.cantidad * r.costoUnitario,
+    (sum, r) => sum + r.costoTotal,
     0
   );
+
+  // Funciones para manejo de imagenes
+  const agregarImagenes = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(e.target.files || []);
+    if (files.length === 0) return;
+
+    // Limitar a 5 imagenes maximo
+    const nuevasImagenes = [...imagenes, ...files].slice(0, 5);
+    setImagenes(nuevasImagenes);
+
+    // Crear previews
+    const previews = nuevasImagenes.map((file) => URL.createObjectURL(file));
+    // Limpiar previews anteriores
+    imagenesPreview.forEach((url) => URL.revokeObjectURL(url));
+    setImagenesPreview(previews);
+  };
+
+  const eliminarImagen = (index: number) => {
+    URL.revokeObjectURL(imagenesPreview[index]);
+    setImagenes(imagenes.filter((_, i) => i !== index));
+    setImagenesPreview(imagenesPreview.filter((_, i) => i !== index));
+  };
+
+  const subirImagenes = async (mantenimientoId: string): Promise<string[]> => {
+    const urls: string[] = [];
+
+    for (const file of imagenes) {
+      const fileExt = file.name.split('.').pop();
+      const fileName = `${mantenimientoId}/${Date.now()}-${Math.random().toString(36).substring(7)}.${fileExt}`;
+
+      const { error } = await supabase.storage
+        .from('mantenimientos')
+        .upload(fileName, file);
+
+      if (error) {
+        console.error('Error subiendo imagen:', error);
+        continue;
+      }
+
+      const { data: urlData } = supabase.storage
+        .from('mantenimientos')
+        .getPublicUrl(fileName);
+
+      urls.push(urlData.publicUrl);
+    }
+
+    return urls;
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -158,6 +210,19 @@ export default function NuevoMantenimientoPage() {
         throw new Error('Error al crear el mantenimiento');
       }
 
+      // Subir imagenes si hay
+      if (imagenes.length > 0) {
+        const imageUrls = await subirImagenes(mantenimiento.id);
+        if (imageUrls.length > 0) {
+          // Actualizar el mantenimiento con las URLs de imagenes
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          await (supabase as any)
+            .from('mantenimientos')
+            .update({ imagenes: imageUrls })
+            .eq('id', mantenimiento.id);
+        }
+      }
+
       // Crear repuestos si hay
       if (repuestos.length > 0) {
         const repuestosData = repuestos
@@ -166,7 +231,7 @@ export default function NuevoMantenimientoPage() {
             mantenimiento_id: mantenimiento.id,
             nombre: r.nombre,
             cantidad: r.cantidad,
-            costo_unitario: r.costoUnitario,
+            costo_unitario: r.cantidad > 0 ? Math.round(r.costoTotal / r.cantidad) : r.costoTotal,
           }));
 
         if (repuestosData.length > 0) {
@@ -448,15 +513,15 @@ export default function NuevoMantenimientoPage() {
                           />
                         </div>
                         <div className="w-32 space-y-1">
-                          <Label className="text-xs">Costo Unit.</Label>
+                          <Label className="text-xs">Costo Total</Label>
                           <Input
                             type="number"
                             min="0"
-                            value={repuesto.costoUnitario}
+                            value={repuesto.costoTotal}
                             onChange={(e) =>
                               actualizarRepuesto(
                                 index,
-                                'costoUnitario',
+                                'costoTotal',
                                 parseInt(e.target.value) || 0
                               )
                             }
@@ -477,6 +542,75 @@ export default function NuevoMantenimientoPage() {
                   <p className="text-sm text-muted-foreground text-center py-4">
                     No hay repuestos agregados
                   </p>
+                )}
+              </CardContent>
+            </Card>
+
+            {/* Imagenes */}
+            <Card>
+              <CardHeader className="flex flex-row items-center justify-between">
+                <CardTitle className="text-base">Imagenes / Fotos</CardTitle>
+                <span className="text-xs text-muted-foreground">
+                  {imagenes.length}/5 imagenes
+                </span>
+              </CardHeader>
+              <CardContent>
+                {imagenesPreview.length > 0 ? (
+                  <div className="space-y-4">
+                    <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-3">
+                      {imagenesPreview.map((preview, index) => (
+                        <div key={index} className="relative group aspect-square">
+                          <Image
+                            src={preview}
+                            alt={`Imagen ${index + 1}`}
+                            fill
+                            className="object-cover rounded-lg border"
+                          />
+                          <Button
+                            type="button"
+                            variant="destructive"
+                            size="icon"
+                            className="absolute -top-2 -right-2 h-6 w-6 opacity-0 group-hover:opacity-100 transition-opacity"
+                            onClick={() => eliminarImagen(index)}
+                          >
+                            <Trash2 className="h-3 w-3" />
+                          </Button>
+                        </div>
+                      ))}
+                    </div>
+                    {imagenes.length < 5 && (
+                      <label className="flex items-center justify-center gap-2 p-3 border-2 border-dashed rounded-lg cursor-pointer hover:border-primary hover:bg-muted/50 transition-colors">
+                        <ImagePlus className="h-4 w-4 text-muted-foreground" />
+                        <span className="text-sm text-muted-foreground">
+                          Agregar mas imagenes
+                        </span>
+                        <input
+                          type="file"
+                          accept="image/*"
+                          multiple
+                          className="hidden"
+                          onChange={agregarImagenes}
+                        />
+                      </label>
+                    )}
+                  </div>
+                ) : (
+                  <label className="flex flex-col items-center justify-center gap-2 p-8 border-2 border-dashed rounded-lg cursor-pointer hover:border-primary hover:bg-muted/50 transition-colors">
+                    <ImagePlus className="h-8 w-8 text-muted-foreground" />
+                    <span className="text-sm text-muted-foreground text-center">
+                      Haz clic para agregar fotos del mantenimiento
+                    </span>
+                    <span className="text-xs text-muted-foreground">
+                      Maximo 5 imagenes
+                    </span>
+                    <input
+                      type="file"
+                      accept="image/*"
+                      multiple
+                      className="hidden"
+                      onChange={agregarImagenes}
+                    />
+                  </label>
                 )}
               </CardContent>
             </Card>

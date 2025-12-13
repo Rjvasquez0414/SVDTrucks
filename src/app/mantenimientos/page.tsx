@@ -23,9 +23,9 @@ import {
 } from '@/components/ui/table';
 import { getVehiculos } from '@/lib/queries/vehiculos';
 import { getMantenimientos, type MantenimientoConVehiculo } from '@/lib/queries/mantenimientos';
-import { getCategoriaInfo } from '@/data/tipos-mantenimiento';
+import { getCategoriaInfo, catalogoMantenimiento } from '@/data/tipos-mantenimiento';
 import { Plus, Search, Calendar, Wrench, Eye, Loader2 } from 'lucide-react';
-import type { TipoMantenimiento, VehiculoCompleto } from '@/types/database';
+import type { TipoMantenimiento, VehiculoCompleto, CategoriaMantenimiento } from '@/types/database';
 import { formatNumber } from '@/lib/utils';
 import Link from 'next/link';
 
@@ -33,6 +33,7 @@ export default function MantenimientosPage() {
   const [busqueda, setBusqueda] = useState('');
   const [filtroTipo, setFiltroTipo] = useState<TipoMantenimiento | 'todos'>('todos');
   const [filtroVehiculo, setFiltroVehiculo] = useState<string>('todos');
+  const [filtroCategoria, setFiltroCategoria] = useState<CategoriaMantenimiento | 'todas'>('todas');
 
   const [mantenimientos, setMantenimientos] = useState<MantenimientoConVehiculo[]>([]);
   const [vehiculos, setVehiculos] = useState<VehiculoCompleto[]>([]);
@@ -63,8 +64,9 @@ export default function MantenimientosPage() {
 
       const coincideTipo = filtroTipo === 'todos' || m.tipo === filtroTipo;
       const coincideVehiculo = filtroVehiculo === 'todos' || m.vehiculo_id === filtroVehiculo;
+      const coincideCategoria = filtroCategoria === 'todas' || m.categoria === filtroCategoria;
 
-      return coincideBusqueda && coincideTipo && coincideVehiculo;
+      return coincideBusqueda && coincideTipo && coincideVehiculo && coincideCategoria;
     })
     .sort((a, b) => new Date(b.fecha).getTime() - new Date(a.fecha).getTime());
 
@@ -136,6 +138,23 @@ export default function MantenimientosPage() {
               {vehiculos.map((v) => (
                 <SelectItem key={v.id} value={v.id}>
                   {v.placa} - {v.marca}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+
+          <Select
+            value={filtroCategoria}
+            onValueChange={(value) => setFiltroCategoria(value as CategoriaMantenimiento | 'todas')}
+          >
+            <SelectTrigger className="w-48">
+              <SelectValue placeholder="Categoria" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="todas">Todas las categorias</SelectItem>
+              {catalogoMantenimiento.map((cat) => (
+                <SelectItem key={cat.categoria} value={cat.categoria}>
+                  {cat.nombre}
                 </SelectItem>
               ))}
             </SelectContent>

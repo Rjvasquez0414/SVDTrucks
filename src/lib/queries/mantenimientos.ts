@@ -18,6 +18,7 @@ export interface Mantenimiento {
   observaciones: string | null;
   proximo_km: number | null;
   proxima_fecha: string | null;
+  imagenes: string[];
   created_by: string | null;
   created_at: string;
   updated_at: string;
@@ -35,6 +36,7 @@ export interface MantenimientoInsert {
   observaciones?: string | null;
   proximo_km?: number | null;
   proxima_fecha?: string | null;
+  imagenes?: string[];
   created_by?: string | null;
 }
 

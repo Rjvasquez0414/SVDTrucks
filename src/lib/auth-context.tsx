@@ -1,6 +1,6 @@
 'use client';
 
-import { createContext, useContext, useState, useEffect, ReactNode } from 'react';
+import { createContext, useContext, useState, useEffect, useCallback, ReactNode } from 'react';
 import { useRouter } from 'next/navigation';
 import { supabase } from './supabase';
 import type { User } from '@supabase/supabase-js';
@@ -30,7 +30,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const router = useRouter();
 
   // Obtener perfil del usuario desde la tabla usuarios
-  const fetchUserProfile = async (authUser: User): Promise<Usuario | null> => {
+  const fetchUserProfile = useCallback(async (authUser: User): Promise<Usuario | null> => {
     const { data, error } = await supabase
       .from('usuarios')
       .select('id, nombre, email, rol, avatar_url')
@@ -43,26 +43,26 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
 
     return data;
-  };
+  }, []);
+
+  // Funcion helper para cargar perfil con timeout
+  const loadProfileWithTimeout = useCallback(async (user: User, timeoutMs: number = 5000) => {
+    try {
+      const timeoutPromise = new Promise<null>((_, reject) => {
+        setTimeout(() => reject(new Error('Profile fetch timeout')), timeoutMs);
+      });
+      const profilePromise = fetchUserProfile(user);
+      return await Promise.race([profilePromise, timeoutPromise]);
+    } catch (error) {
+      console.error('[Auth] Error cargando perfil:', error);
+      return null;
+    }
+  }, [fetchUserProfile]);
 
   // Escuchar cambios de autenticacion
   useEffect(() => {
     console.log('[Auth] Configurando listener de auth...');
     let initialCheckDone = false;
-
-    // Funcion helper para cargar perfil con timeout
-    const loadProfileWithTimeout = async (user: User, timeoutMs: number = 5000) => {
-      try {
-        const timeoutPromise = new Promise<null>((_, reject) => {
-          setTimeout(() => reject(new Error('Profile fetch timeout')), timeoutMs);
-        });
-        const profilePromise = fetchUserProfile(user);
-        return await Promise.race([profilePromise, timeoutPromise]);
-      } catch (error) {
-        console.error('[Auth] Error cargando perfil:', error);
-        return null;
-      }
-    };
 
     // Usar onAuthStateChange como fuente principal
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
@@ -120,7 +120,29 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       clearTimeout(timeoutId);
       subscription.unsubscribe();
     };
-  }, []);
+  }, [loadProfileWithTimeout]);
+
+  // Refrescar sesion cuando la ventana vuelve a ser visible
+  useEffect(() => {
+    const handleVisibilityChange = async () => {
+      if (document.visibilityState === 'visible' && !usuario) {
+        console.log('[Auth] Ventana visible, verificando sesion...');
+        const { data: { session } } = await supabase.auth.getSession();
+        if (session?.user) {
+          console.log('[Auth] Sesion encontrada, restaurando perfil...');
+          const profile = await loadProfileWithTimeout(session.user);
+          if (profile) {
+            setUsuario(profile);
+          }
+        }
+      }
+    };
+
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+    };
+  }, [usuario, loadProfileWithTimeout]);
 
   const login = async (email: string, password: string): Promise<{ success: boolean; error?: string }> => {
     try {
