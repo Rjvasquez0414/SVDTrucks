@@ -103,6 +103,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           }
         } else if (event === 'TOKEN_REFRESHED') {
           console.log('[Auth] Token refrescado');
+          // Mantener la sesion activa - verificar que el usuario sigue válido
+          if (session?.user && !usuario) {
+            console.log('[Auth] Token refrescado pero usuario no cargado, restaurando...');
+            const profile = await loadProfileWithTimeout(session.user);
+            if (profile) {
+              setUsuario(profile);
+            }
+          }
         }
       }
     );
@@ -125,15 +133,23 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   // Refrescar sesion cuando la ventana vuelve a ser visible
   useEffect(() => {
     const handleVisibilityChange = async () => {
-      if (document.visibilityState === 'visible' && !usuario) {
+      if (document.visibilityState === 'visible') {
         console.log('[Auth] Ventana visible, verificando sesion...');
         const { data: { session } } = await supabase.auth.getSession();
+
         if (session?.user) {
-          console.log('[Auth] Sesion encontrada, restaurando perfil...');
-          const profile = await loadProfileWithTimeout(session.user);
-          if (profile) {
-            setUsuario(profile);
+          // Si hay sesion pero no hay usuario cargado, restaurar
+          if (!usuario) {
+            console.log('[Auth] Sesion encontrada, restaurando perfil...');
+            const profile = await loadProfileWithTimeout(session.user);
+            if (profile) {
+              setUsuario(profile);
+            }
           }
+        } else if (usuario) {
+          // Si no hay sesion pero hay usuario, limpiar
+          console.log('[Auth] No hay sesion pero hay usuario, limpiando estado...');
+          setUsuario(null);
         }
       }
     };

@@ -21,6 +21,12 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
 import { getVehiculos } from '@/lib/queries/vehiculos';
 import { getMantenimientos, type MantenimientoConVehiculo } from '@/lib/queries/mantenimientos';
 import { getCategoriaInfo, catalogoMantenimiento } from '@/data/tipos-mantenimiento';
@@ -38,6 +44,8 @@ export default function MantenimientosPage() {
   const [mantenimientos, setMantenimientos] = useState<MantenimientoConVehiculo[]>([]);
   const [vehiculos, setVehiculos] = useState<VehiculoCompleto[]>([]);
   const [loading, setLoading] = useState(true);
+  const [mantenimientoSeleccionado, setMantenimientoSeleccionado] = useState<MantenimientoConVehiculo | null>(null);
+  const [modalAbierto, setModalAbierto] = useState(false);
 
   // Cargar datos
   useEffect(() => {
@@ -266,7 +274,14 @@ export default function MantenimientosPage() {
                       {formatearPesos(m.costo || 0)}
                     </TableCell>
                     <TableCell>
-                      <Button variant="ghost" size="icon">
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        onClick={() => {
+                          setMantenimientoSeleccionado(m);
+                          setModalAbierto(true);
+                        }}
+                      >
                         <Eye className="h-4 w-4" />
                       </Button>
                     </TableCell>
@@ -299,6 +314,118 @@ export default function MantenimientosPage() {
           )}
         </CardContent>
       </Card>
+
+      {/* Modal de detalle de mantenimiento */}
+      <Dialog open={modalAbierto} onOpenChange={setModalAbierto}>
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Detalle de Mantenimiento</DialogTitle>
+          </DialogHeader>
+
+          {mantenimientoSeleccionado && (() => {
+            const categoriaInfo = getCategoriaInfo(mantenimientoSeleccionado.categoria);
+            return (
+              <div className="space-y-6">
+                {/* Información general */}
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <p className="text-sm text-muted-foreground">Fecha</p>
+                    <p className="font-medium">{formatearFecha(mantenimientoSeleccionado.fecha)}</p>
+                  </div>
+                  <div>
+                    <p className="text-sm text-muted-foreground">Vehiculo</p>
+                    <p className="font-medium">
+                      {mantenimientoSeleccionado.vehiculos?.placa} - {mantenimientoSeleccionado.vehiculos?.marca} {mantenimientoSeleccionado.vehiculos?.modelo}
+                    </p>
+                  </div>
+                  <div>
+                    <p className="text-sm text-muted-foreground">Tipo</p>
+                    <Badge variant={mantenimientoSeleccionado.tipo === 'preventivo' ? 'secondary' : 'outline'}>
+                      {mantenimientoSeleccionado.tipo === 'preventivo' ? 'Preventivo' : 'Correctivo'}
+                    </Badge>
+                  </div>
+                  <div>
+                    <p className="text-sm text-muted-foreground">Categoria</p>
+                    <p className="font-medium">{categoriaInfo?.nombre || mantenimientoSeleccionado.categoria}</p>
+                  </div>
+                </div>
+
+                {/* Descripción */}
+                <div>
+                  <p className="text-sm text-muted-foreground">Descripcion</p>
+                  <p className="mt-1">{mantenimientoSeleccionado.descripcion || 'Sin descripcion'}</p>
+                </div>
+
+                {/* Kilometraje y próximo mantenimiento */}
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <p className="text-sm text-muted-foreground">Kilometraje</p>
+                    <p className="font-medium">{formatNumber(mantenimientoSeleccionado.kilometraje)} km</p>
+                  </div>
+                  {mantenimientoSeleccionado.proximo_km && (
+                    <div>
+                      <p className="text-sm text-muted-foreground">Proximo Mantenimiento</p>
+                      <p className="font-medium">{formatNumber(mantenimientoSeleccionado.proximo_km)} km</p>
+                    </div>
+                  )}
+                  {mantenimientoSeleccionado.proxima_fecha && (
+                    <div>
+                      <p className="text-sm text-muted-foreground">Proxima Fecha</p>
+                      <p className="font-medium">{formatearFecha(mantenimientoSeleccionado.proxima_fecha)}</p>
+                    </div>
+                  )}
+                </div>
+
+                {/* Costo y proveedor */}
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <p className="text-sm text-muted-foreground">Costo Total</p>
+                    <p className="font-medium text-lg">{formatearPesos(mantenimientoSeleccionado.costo || 0)}</p>
+                  </div>
+                  {mantenimientoSeleccionado.proveedor && (
+                    <div>
+                      <p className="text-sm text-muted-foreground">Proveedor</p>
+                      <p className="font-medium">{mantenimientoSeleccionado.proveedor}</p>
+                    </div>
+                  )}
+                </div>
+
+                {/* Observaciones */}
+                {mantenimientoSeleccionado.observaciones && (
+                  <div>
+                    <p className="text-sm text-muted-foreground">Observaciones</p>
+                    <p className="mt-1 text-sm">{mantenimientoSeleccionado.observaciones}</p>
+                  </div>
+                )}
+
+                {/* Galería de imágenes */}
+                {mantenimientoSeleccionado.imagenes && mantenimientoSeleccionado.imagenes.length > 0 && (
+                  <div>
+                    <p className="text-sm text-muted-foreground mb-2">Imagenes ({mantenimientoSeleccionado.imagenes.length})</p>
+                    <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
+                      {mantenimientoSeleccionado.imagenes.map((url, index) => (
+                        <a
+                          key={index}
+                          href={url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="aspect-square rounded-lg overflow-hidden border hover:opacity-80 transition-opacity"
+                        >
+                          <img
+                            src={url}
+                            alt={`Imagen ${index + 1}`}
+                            className="w-full h-full object-cover"
+                          />
+                        </a>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            );
+          })()}
+        </DialogContent>
+      </Dialog>
     </MainLayout>
   );
 }

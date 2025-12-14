@@ -24,7 +24,17 @@ export default function VehiculosPage() {
   const [busqueda, setBusqueda] = useState('');
   const [filtroEstado, setFiltroEstado] = useState<EstadoVehiculo | 'todos'>('todos');
   const [filtroTipo, setFiltroTipo] = useState<TipoVehiculo | 'todos'>('todos');
+  const [filtroConductor, setFiltroConductor] = useState<string>('todos');
   const [vistaGrid, setVistaGrid] = useState(true);
+
+  // Obtener lista única de conductores de los vehículos
+  const conductoresUnicos = vehiculos
+    .filter(v => v.conductores)
+    .map(v => v.conductores!)
+    .filter((conductor, index, self) =>
+      self.findIndex(c => c.id === conductor.id) === index
+    )
+    .sort((a, b) => a.nombre.localeCompare(b.nombre));
 
   useEffect(() => {
     async function loadVehiculos() {
@@ -44,8 +54,9 @@ export default function VehiculosPage() {
 
     const coincideEstado = filtroEstado === 'todos' || v.estado === filtroEstado;
     const coincideTipo = filtroTipo === 'todos' || v.tipo === filtroTipo;
+    const coincideConductor = filtroConductor === 'todos' || v.conductores?.id === filtroConductor;
 
-    return coincideBusqueda && coincideEstado && coincideTipo;
+    return coincideBusqueda && coincideEstado && coincideTipo && coincideConductor;
   });
 
   return (
@@ -92,6 +103,20 @@ export default function VehiculosPage() {
               <SelectItem value="camion">Camion</SelectItem>
               <SelectItem value="tractomula">Tractomula</SelectItem>
               <SelectItem value="volqueta">Volqueta</SelectItem>
+            </SelectContent>
+          </Select>
+
+          <Select value={filtroConductor} onValueChange={setFiltroConductor}>
+            <SelectTrigger className="w-44">
+              <SelectValue placeholder="Conductor" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="todos">Todos los conductores</SelectItem>
+              {conductoresUnicos.map((conductor) => (
+                <SelectItem key={conductor.id} value={conductor.id}>
+                  {conductor.nombre}
+                </SelectItem>
+              ))}
             </SelectContent>
           </Select>
         </div>

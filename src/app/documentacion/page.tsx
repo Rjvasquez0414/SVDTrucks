@@ -53,9 +53,6 @@ const documentosPorCategoria: Record<CategoriaDocumento, { tipo: TipoDocumento; 
   ],
   tanque: [
     { tipo: 'prueba_hidrostatica', nombre: 'Prueba Hidrostatica' },
-    { tipo: 'certificado_luz_negra', nombre: 'Certificado Luz Negra (Copetran)' },
-    { tipo: 'programa_mantenimiento_copetran', nombre: 'Programa de Mantenimiento (Copetran)' },
-    { tipo: 'certificacion_quinta_rueda', nombre: 'Certificacion Quinta Rueda (Copetran)' },
   ],
   conductor: [
     { tipo: 'eps', nombre: 'EPS' },
@@ -70,8 +67,6 @@ const documentosPorCategoria: Record<CategoriaDocumento, { tipo: TipoDocumento; 
     { tipo: 'poliza_todo_riesgo_cabezote', nombre: 'Poliza Todo Riesgo Cabezote' },
     { tipo: 'poliza_todo_riesgo_tanque', nombre: 'Poliza Todo Riesgo Tanque' },
     { tipo: 'poliza_decreto_1079', nombre: 'Poliza Decreto 1079/2015' },
-    { tipo: 'poliza_rce_copetran', nombre: 'Poliza RCE (Copetran)' },
-    { tipo: 'poliza_rce_exceso_copetran', nombre: 'Poliza RCE en Exceso (Copetran)' },
   ],
 };
 
