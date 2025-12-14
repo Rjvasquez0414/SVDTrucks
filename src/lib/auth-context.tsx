@@ -45,8 +45,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return data;
   }, []);
 
-  // Funcion helper para cargar perfil con timeout
-  const loadProfileWithTimeout = useCallback(async (user: User, timeoutMs: number = 5000) => {
+  // Funcion helper para cargar perfil con timeout (aumentado a 15s)
+  const loadProfileWithTimeout = useCallback(async (user: User, timeoutMs: number = 15000) => {
     try {
       const timeoutPromise = new Promise<null>((_, reject) => {
         setTimeout(() => reject(new Error('Profile fetch timeout')), timeoutMs);
@@ -74,7 +74,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             console.log('[Auth] Sesion inicial encontrada, cargando perfil...');
             const profile = await loadProfileWithTimeout(session.user);
             console.log('[Auth] Perfil cargado:', profile?.nombre || 'null');
-            setUsuario(profile);
+            // Solo actualizar si obtuvimos un perfil válido
+            if (profile) {
+              setUsuario(profile);
+            }
           } else {
             console.log('[Auth] No hay sesion inicial');
           }
@@ -89,7 +92,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           }
           const profile = await loadProfileWithTimeout(session.user);
           console.log('[Auth] Perfil cargado:', profile?.nombre || 'null');
-          setUsuario(profile);
+          // IMPORTANTE: Solo actualizar si obtuvimos un perfil válido
+          // No sobrescribir usuario existente con null
+          if (profile) {
+            setUsuario(profile);
+          } else {
+            console.log('[Auth] Perfil null, manteniendo usuario actual');
+          }
           if (wasInitialCheck) {
             console.log('[Auth] Completando carga inicial');
             setIsLoading(false);
