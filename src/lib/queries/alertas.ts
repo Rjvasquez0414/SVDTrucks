@@ -161,22 +161,33 @@ export async function descartarAlerta(id: string): Promise<boolean> {
  * Crea una nueva alerta
  */
 export async function crearAlerta(alerta: AlertaInsert): Promise<Alerta | null> {
+  const insertData = {
+    ...alerta,
+    estado: 'pendiente',
+    fecha_generada: new Date().toISOString(),
+  };
+
+  console.log('[Alertas] Intentando crear alerta:', insertData);
+
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const { data, error } = await (supabase as any)
     .from('alertas')
-    .insert({
-      ...alerta,
-      estado: 'pendiente',
-      fecha_generada: new Date().toISOString(),
-    })
+    .insert(insertData)
     .select()
     .single();
 
   if (error) {
-    console.error('Error creating alerta:', error);
+    console.error('[Alertas] Error creating alerta:', {
+      message: error.message,
+      code: error.code,
+      details: error.details,
+      hint: error.hint,
+      insertData,
+    });
     return null;
   }
 
+  console.log('[Alertas] Alerta creada exitosamente:', data?.id);
   return data as Alerta;
 }
 
