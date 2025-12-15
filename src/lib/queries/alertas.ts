@@ -49,6 +49,8 @@ export interface AlertaInsert {
  * Obtiene todas las alertas pendientes
  */
 export async function getAlertasPendientes(): Promise<AlertaConVehiculo[]> {
+  console.log('[Alertas] Obteniendo alertas pendientes...');
+
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const { data, error } = await (supabase as any)
     .from('alertas')
@@ -61,11 +63,35 @@ export async function getAlertasPendientes(): Promise<AlertaConVehiculo[]> {
     .order('fecha_generada', { ascending: false });
 
   if (error) {
-    console.error('Error fetching alertas:', error);
+    console.error('[Alertas] Error fetching alertas:', error);
     return [];
   }
 
+  console.log('[Alertas] Alertas encontradas:', data?.length || 0);
   return (data as AlertaConVehiculo[]) || [];
+}
+
+/**
+ * Limpia alertas huérfanas (sin estado o fecha_generada)
+ */
+export async function limpiarAlertasHuerfanas(): Promise<number> {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { data: alertasSinEstado } = await (supabase as any)
+    .from('alertas')
+    .select('id')
+    .is('estado', null);
+
+  if (alertasSinEstado && alertasSinEstado.length > 0) {
+    const ids = alertasSinEstado.map((a: { id: string }) => a.id);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    await (supabase as any)
+      .from('alertas')
+      .delete()
+      .in('id', ids);
+    console.log('[Alertas] Eliminadas', ids.length, 'alertas huerfanas');
+    return ids.length;
+  }
+  return 0;
 }
 
 /**
@@ -138,7 +164,11 @@ export async function crearAlerta(alerta: AlertaInsert): Promise<Alerta | null> 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const { data, error } = await (supabase as any)
     .from('alertas')
-    .insert(alerta)
+    .insert({
+      ...alerta,
+      estado: 'pendiente',
+      fecha_generada: new Date().toISOString(),
+    })
     .select()
     .single();
 
@@ -623,6 +653,9 @@ export async function generarTodasLasAlertas(): Promise<{
   total: number;
 }> {
   console.log('[Alertas] Iniciando generacion de alertas...');
+
+  // Primero limpiar alertas huérfanas (sin estado correcto)
+  await limpiarAlertasHuerfanas();
 
   const [mantenimientosKm, mantenimientosTiempo, documentos, kilometraje] = await Promise.all([
     generarAlertasMantenimientoKm(),
