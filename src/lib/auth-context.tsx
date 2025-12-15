@@ -1,6 +1,6 @@
 'use client';
 
-import { createContext, useContext, useState, useEffect, useCallback, useRef, ReactNode } from 'react';
+import { createContext, useContext, useState, useEffect, useCallback, ReactNode } from 'react';
 import { useRouter } from 'next/navigation';
 import { supabase } from './supabase';
 import type { User } from '@supabase/supabase-js';
@@ -29,9 +29,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [isLoading, setIsLoading] = useState(true);
   const router = useRouter();
 
-  // Flag para evitar llamadas concurrentes
-  const loadingProfileRef = useRef(false);
-
   // Obtener perfil del usuario desde la tabla usuarios
   const fetchUserProfile = useCallback(async (authUser: User): Promise<Usuario | null> => {
     const { data, error } = await supabase
@@ -48,122 +45,92 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return data;
   }, []);
 
-  // Escuchar cambios de autenticacion
+  // Escuchar cambios de autenticacion - SOLO SE EJECUTA UNA VEZ
   useEffect(() => {
     console.log('[Auth] Configurando listener de auth...');
     let initialCheckDone = false;
-
-    // Funcion para cargar perfil evitando llamadas concurrentes
-    const loadProfileSafely = async (user: User): Promise<Usuario | null> => {
-      // Si ya hay una carga en progreso, no hacer otra
-      if (loadingProfileRef.current) {
-        console.log('[Auth] Ya hay una carga de perfil en progreso, omitiendo...');
-        return null;
-      }
-
-      loadingProfileRef.current = true;
-      try {
-        // Usar fetchUserProfile directo (sin timeout agresivo)
-        const profile = await fetchUserProfile(user);
-        return profile;
-      } finally {
-        loadingProfileRef.current = false;
-      }
-    };
+    let mounted = true;
 
     // Usar onAuthStateChange como fuente principal
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       async (event, session) => {
-        console.log('[Auth] onAuthStateChange evento:', event, '| initialCheckDone:', initialCheckDone);
+        if (!mounted) return;
+
+        console.log('[Auth] onAuthStateChange evento:', event);
 
         if (event === 'INITIAL_SESSION') {
           if (session?.user) {
             console.log('[Auth] Sesion inicial encontrada, cargando perfil...');
-            const profile = await loadProfileSafely(session.user);
-            console.log('[Auth] Perfil cargado:', profile?.nombre || 'null');
-            if (profile) {
-              setUsuario(profile);
+            try {
+              const profile = await fetchUserProfile(session.user);
+              if (mounted && profile) {
+                setUsuario(profile);
+              }
+            } catch (err) {
+              console.error('[Auth] Error cargando perfil:', err);
             }
           } else {
             console.log('[Auth] No hay sesion inicial');
           }
           initialCheckDone = true;
-          setIsLoading(false);
+          if (mounted) setIsLoading(false);
         } else if (event === 'SIGNED_IN' && session?.user) {
           console.log('[Auth] Usuario inicio sesion');
-          const wasInitialCheck = !initialCheckDone;
-          if (wasInitialCheck) {
-            console.log('[Auth] SIGNED_IN como evento inicial');
-            initialCheckDone = true;
-          }
-          // Solo cargar perfil si NO hay usuario actualmente
-          if (!usuario) {
-            const profile = await loadProfileSafely(session.user);
-            console.log('[Auth] Perfil cargado:', profile?.nombre || 'null');
-            if (profile) {
-              setUsuario(profile);
-            }
-          } else {
-            console.log('[Auth] Usuario ya existe, omitiendo carga de perfil');
-          }
-          if (wasInitialCheck) {
-            console.log('[Auth] Completando carga inicial');
-            setIsLoading(false);
-          }
-        } else if (event === 'SIGNED_OUT') {
-          console.log('[Auth] Usuario cerro sesion');
-          setUsuario(null);
           if (!initialCheckDone) {
             initialCheckDone = true;
+          }
+          try {
+            const profile = await fetchUserProfile(session.user);
+            if (mounted && profile) {
+              setUsuario(profile);
+            }
+          } catch (err) {
+            console.error('[Auth] Error cargando perfil:', err);
+          }
+          if (mounted) setIsLoading(false);
+        } else if (event === 'SIGNED_OUT') {
+          console.log('[Auth] Usuario cerro sesion');
+          if (mounted) {
+            setUsuario(null);
             setIsLoading(false);
           }
+          initialCheckDone = true;
         } else if (event === 'TOKEN_REFRESHED') {
           console.log('[Auth] Token refrescado - sesion activa');
-          // No hacer nada, el token se refrescó automáticamente
         }
       }
     );
 
-    // Timeout de seguridad - si ningun evento llega en 3s
+    // Timeout de seguridad - si ningun evento llega en 2s
     const timeoutId = setTimeout(() => {
-      if (!initialCheckDone) {
-        console.warn('[Auth] TIMEOUT - no se recibio evento de auth en 3s');
-        initialCheckDone = true;
+      if (!initialCheckDone && mounted) {
+        console.warn('[Auth] TIMEOUT - forzando fin de carga');
         setIsLoading(false);
       }
-    }, 3000);
+    }, 2000);
 
     return () => {
+      mounted = false;
       clearTimeout(timeoutId);
       subscription.unsubscribe();
     };
-  }, [fetchUserProfile, usuario]);
+  }, [fetchUserProfile]); // REMOVIDO 'usuario' del dependency array
 
-  // Refrescar sesion cuando la ventana vuelve a ser visible
+  // Refrescar sesion cuando la ventana vuelve a ser visible (solo si no hay usuario)
   useEffect(() => {
     const handleVisibilityChange = async () => {
-      if (document.visibilityState === 'visible') {
-        // Si ya hay usuario, no hacer nada - la sesion está activa
-        if (usuario) {
-          console.log('[Auth] Ventana visible - usuario activo, sin accion necesaria');
-          return;
-        }
-
-        // Solo verificar sesion si no hay usuario
-        console.log('[Auth] Ventana visible, sin usuario - verificando sesion...');
-        const { data: { session } } = await supabase.auth.getSession();
-
-        if (session?.user && !loadingProfileRef.current) {
-          console.log('[Auth] Sesion encontrada, restaurando perfil...');
-          loadingProfileRef.current = true;
-          try {
+      if (document.visibilityState === 'visible' && !usuario) {
+        console.log('[Auth] Ventana visible sin usuario - verificando sesion...');
+        try {
+          const { data: { session } } = await supabase.auth.getSession();
+          if (session?.user) {
             const profile = await fetchUserProfile(session.user);
             if (profile) {
               setUsuario(profile);
             }
-          } finally {
-            loadingProfileRef.current = false;
           }
+        } catch (err) {
+          console.error('[Auth] Error verificando sesion:', err);
         }
       }
     };
