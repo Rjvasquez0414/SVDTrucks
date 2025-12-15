@@ -179,6 +179,13 @@ function calcularPrioridad(kmRestantes?: number, diasRestantes?: number): Priori
 
 /**
  * Genera alertas de mantenimiento basadas en kilometraje
+ *
+ * Logica mejorada:
+ * - Para cada vehiculo y categoria con intervaloKm
+ * - Busca el ULTIMO mantenimiento de esa categoria
+ * - Calcula el proximo km como: km_ultimo_mantenimiento + intervalo
+ * - Si no hay mantenimiento previo, calcula desde el km actual del vehiculo
+ * - Genera alerta si esta dentro de 5000 km del proximo mantenimiento
  */
 export async function generarAlertasMantenimientoKm(): Promise<number> {
   let alertasCreadas = 0;
@@ -197,24 +204,48 @@ export async function generarAlertasMantenimientoKm(): Promise<number> {
   const vehiculos = vehiculosData as Array<{ id: string; placa: string; kilometraje: number }>;
 
   for (const vehiculo of vehiculos) {
-    // Obtener los ultimos mantenimientos del vehiculo
+    // Obtener TODOS los mantenimientos del vehiculo ordenados por fecha
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const { data: mantenimientos } = await (supabase as any)
       .from('mantenimientos')
-      .select('categoria, proximo_km')
+      .select('categoria, kilometraje, proximo_km, fecha')
       .eq('vehiculo_id', vehiculo.id)
-      .not('proximo_km', 'is', null);
+      .order('fecha', { ascending: false });
+
+    const mantsArray = (mantenimientos || []) as Array<{
+      categoria: string;
+      kilometraje: number;
+      proximo_km: number | null;
+      fecha: string;
+    }>;
 
     // Verificar cada tipo de mantenimiento con intervalo de km
     for (const catInfo of catalogoMantenimiento.filter(c => c.intervaloKm)) {
-      const ultimoMant = (mantenimientos as Array<{ categoria: string; proximo_km: number }> | null)?.find(
-        m => m.categoria === catInfo.categoria
-      );
-      const proximoKm = ultimoMant?.proximo_km || catInfo.intervaloKm!;
+      // Buscar el ULTIMO mantenimiento de esta categoria (ya viene ordenado desc)
+      const ultimoMant = mantsArray.find(m => m.categoria === catInfo.categoria);
+
+      let proximoKm: number;
+
+      if (ultimoMant) {
+        // Si hay mantenimiento previo, usar proximo_km si existe,
+        // sino calcular: km_del_mantenimiento + intervalo
+        proximoKm = ultimoMant.proximo_km || (ultimoMant.kilometraje + catInfo.intervaloKm!);
+      } else {
+        // Sin mantenimiento previo: calcular el proximo multiplo del intervalo
+        // desde el kilometraje actual del vehiculo
+        // Ejemplo: km=15000, intervalo=20000 -> proximo=20000
+        // Ejemplo: km=25000, intervalo=20000 -> proximo=40000
+        proximoKm = Math.ceil(vehiculo.kilometraje / catInfo.intervaloKm!) * catInfo.intervaloKm!;
+
+        // Si el calculo da exactamente el km actual, agregar un intervalo
+        if (proximoKm <= vehiculo.kilometraje) {
+          proximoKm += catInfo.intervaloKm!;
+        }
+      }
 
       const kmRestantes = proximoKm - vehiculo.kilometraje;
 
-      // Solo crear alerta si estamos dentro del umbral (5000 km antes)
+      // Solo crear alerta si estamos dentro del umbral (5000 km antes o ya paso)
       if (kmRestantes <= 5000) {
         // Verificar si ya existe una alerta pendiente para esto
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -222,16 +253,23 @@ export async function generarAlertasMantenimientoKm(): Promise<number> {
           .from('alertas')
           .select('id')
           .eq('vehiculo_id', vehiculo.id)
-          .eq('tipo', 'mantenimiento_kilometraje')
+          .in('tipo', ['mantenimiento_kilometraje', 'mantenimiento_pendiente'])
           .eq('estado', 'pendiente')
           .eq('kilometraje_limite', proximoKm)
           .single();
 
         if (!alertaExistente) {
           const prioridad = calcularPrioridad(kmRestantes);
-          const mensaje = kmRestantes <= 0
-            ? `${catInfo.nombre} VENCIDO - ${vehiculo.placa} (${Math.abs(kmRestantes).toLocaleString()} km pasado)`
-            : `${catInfo.nombre} proximo - ${vehiculo.placa} (${kmRestantes.toLocaleString()} km restantes)`;
+          const kmFormateados = Math.abs(kmRestantes).toLocaleString('es-CO');
+
+          let mensaje: string;
+          if (kmRestantes <= 0) {
+            mensaje = `${catInfo.nombre} VENCIDO - ${vehiculo.placa} (${kmFormateados} km excedido)`;
+          } else if (kmRestantes <= 1000) {
+            mensaje = `${catInfo.nombre} URGENTE - ${vehiculo.placa} (${kmFormateados} km restantes)`;
+          } else {
+            mensaje = `${catInfo.nombre} proximo - ${vehiculo.placa} (${kmFormateados} km restantes)`;
+          }
 
           await crearAlerta({
             vehiculo_id: vehiculo.id,
@@ -252,12 +290,125 @@ export async function generarAlertasMantenimientoKm(): Promise<number> {
 }
 
 /**
+ * Genera alertas de mantenimiento basadas en tiempo (intervaloMeses)
+ *
+ * Logica:
+ * - Para cada vehiculo y categoria con intervaloMeses
+ * - Busca el ULTIMO mantenimiento de esa categoria
+ * - Calcula la proxima fecha como: fecha_ultimo_mantenimiento + intervalo_meses
+ * - Si no hay mantenimiento previo, no genera alerta (necesita al menos un registro base)
+ * - Genera alerta si esta dentro de 60 dias de la proxima fecha
+ */
+export async function generarAlertasMantenimientoTiempo(): Promise<number> {
+  let alertasCreadas = 0;
+  const hoy = new Date();
+
+  // Obtener todos los vehiculos activos
+  const { data: vehiculosData, error: errorVehiculos } = await supabase
+    .from('vehiculos')
+    .select('id, placa')
+    .eq('estado', 'activo');
+
+  if (errorVehiculos || !vehiculosData) {
+    console.error('Error fetching vehiculos:', errorVehiculos);
+    return 0;
+  }
+
+  const vehiculos = vehiculosData as Array<{ id: string; placa: string }>;
+
+  for (const vehiculo of vehiculos) {
+    // Obtener todos los mantenimientos del vehiculo ordenados por fecha
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const { data: mantenimientos } = await (supabase as any)
+      .from('mantenimientos')
+      .select('categoria, fecha, proxima_fecha')
+      .eq('vehiculo_id', vehiculo.id)
+      .order('fecha', { ascending: false });
+
+    const mantsArray = (mantenimientos || []) as Array<{
+      categoria: string;
+      fecha: string;
+      proxima_fecha: string | null;
+    }>;
+
+    // Verificar cada tipo de mantenimiento con intervalo de meses
+    for (const catInfo of catalogoMantenimiento.filter(c => c.intervaloMeses)) {
+      // Buscar el ULTIMO mantenimiento de esta categoria
+      const ultimoMant = mantsArray.find(m => m.categoria === catInfo.categoria);
+
+      // Si no hay mantenimiento previo, no podemos calcular cuando toca el proximo
+      if (!ultimoMant) continue;
+
+      let proximaFecha: Date;
+
+      if (ultimoMant.proxima_fecha) {
+        // Usar la fecha programada si existe
+        proximaFecha = new Date(ultimoMant.proxima_fecha);
+      } else {
+        // Calcular: fecha_ultimo_mantenimiento + intervalo_meses
+        proximaFecha = new Date(ultimoMant.fecha);
+        proximaFecha.setMonth(proximaFecha.getMonth() + catInfo.intervaloMeses!);
+      }
+
+      const diasRestantes = Math.ceil((proximaFecha.getTime() - hoy.getTime()) / (1000 * 60 * 60 * 24));
+
+      // Solo crear alerta si estamos dentro del umbral (60 dias antes o ya paso)
+      if (diasRestantes <= 60) {
+        const fechaLimiteStr = proximaFecha.toISOString().split('T')[0];
+
+        // Verificar si ya existe una alerta pendiente para esto
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const { data: alertaExistente } = await (supabase as any)
+          .from('alertas')
+          .select('id')
+          .eq('vehiculo_id', vehiculo.id)
+          .eq('tipo', 'mantenimiento_tiempo')
+          .eq('estado', 'pendiente')
+          .eq('fecha_limite', fechaLimiteStr)
+          .single();
+
+        if (!alertaExistente) {
+          const prioridad = calcularPrioridad(undefined, diasRestantes);
+
+          let mensaje: string;
+          if (diasRestantes <= 0) {
+            mensaje = `${catInfo.nombre} VENCIDO - ${vehiculo.placa} (${Math.abs(diasRestantes)} dias excedido)`;
+          } else if (diasRestantes <= 7) {
+            mensaje = `${catInfo.nombre} URGENTE - ${vehiculo.placa} (${diasRestantes} dias restantes)`;
+          } else {
+            mensaje = `${catInfo.nombre} proximo - ${vehiculo.placa} (${diasRestantes} dias restantes)`;
+          }
+
+          await crearAlerta({
+            vehiculo_id: vehiculo.id,
+            tipo: 'mantenimiento_tiempo',
+            prioridad,
+            mensaje,
+            fecha_limite: fechaLimiteStr,
+          });
+
+          alertasCreadas++;
+        }
+      }
+    }
+  }
+
+  return alertasCreadas;
+}
+
+/**
  * Genera alertas de documentos proximos a vencer
+ *
+ * Logica:
+ * - Busca todos los documentos con fecha de vencimiento
+ * - Genera alerta si faltan 60 dias o menos (o ya vencio)
+ * - Asocia la alerta al vehiculo correspondiente
+ * - Incluye la placa del vehiculo en el mensaje para mejor contexto
  */
 export async function generarAlertasDocumentos(): Promise<number> {
   let alertasCreadas = 0;
 
-  // Obtener documentos con fecha de vencimiento
+  // Obtener documentos con fecha de vencimiento, incluyendo info del vehiculo
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const { data: documentos, error } = await (supabase as any)
     .from('documentos')
@@ -275,6 +426,16 @@ export async function generarAlertasDocumentos(): Promise<number> {
   if (error || !documentos) {
     console.error('Error fetching documentos:', error);
     return 0;
+  }
+
+  // Obtener todos los vehiculos para buscar placas
+  const { data: vehiculosData } = await supabase
+    .from('vehiculos')
+    .select('id, placa, conductor_id, remolque_id');
+
+  const vehiculosMap = new Map<string, { placa: string; conductor_id: string | null; remolque_id: string | null }>();
+  for (const v of (vehiculosData || []) as Array<{ id: string; placa: string; conductor_id: string | null; remolque_id: string | null }>) {
+    vehiculosMap.set(v.id, { placa: v.placa, conductor_id: v.conductor_id, remolque_id: v.remolque_id });
   }
 
   const hoy = new Date();
@@ -295,31 +456,38 @@ export async function generarAlertasDocumentos(): Promise<number> {
 
     // Solo alertar si faltan menos de 60 dias o ya vencio
     if (diasRestantes <= 60) {
-      // Necesitamos el vehiculo_id para la alerta
+      // Determinar el vehiculo asociado
       let vehiculoId = doc.vehiculo_id;
+      let placa = '';
+
+      if (vehiculoId && vehiculosMap.has(vehiculoId)) {
+        placa = vehiculosMap.get(vehiculoId)!.placa;
+      }
 
       // Si es documento de remolque, buscar el vehiculo asociado
       if (!vehiculoId && doc.remolque_id) {
-        const { data: vehiculo } = await supabase
-          .from('vehiculos')
-          .select('id')
-          .eq('remolque_id', doc.remolque_id)
-          .single();
-        vehiculoId = (vehiculo as { id: string } | null)?.id || null;
+        for (const [vId, vData] of vehiculosMap) {
+          if (vData.remolque_id === doc.remolque_id) {
+            vehiculoId = vId;
+            placa = vData.placa;
+            break;
+          }
+        }
       }
 
       // Si es documento de conductor, buscar el vehiculo asociado
       if (!vehiculoId && doc.conductor_id) {
-        const { data: vehiculo } = await supabase
-          .from('vehiculos')
-          .select('id')
-          .eq('conductor_id', doc.conductor_id)
-          .single();
-        vehiculoId = (vehiculo as { id: string } | null)?.id || null;
+        for (const [vId, vData] of vehiculosMap) {
+          if (vData.conductor_id === doc.conductor_id) {
+            vehiculoId = vId;
+            placa = vData.placa;
+            break;
+          }
+        }
       }
 
       if (vehiculoId) {
-        // Verificar si ya existe alerta pendiente
+        // Verificar si ya existe alerta pendiente para este documento especifico
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const { data: alertaExistente } = await (supabase as any)
           .from('alertas')
@@ -328,14 +496,23 @@ export async function generarAlertasDocumentos(): Promise<number> {
           .in('tipo', ['vencimiento_documento', 'documento_vencido'])
           .eq('estado', 'pendiente')
           .eq('fecha_limite', doc.fecha_vencimiento)
+          .ilike('mensaje', `%${doc.nombre}%`)
           .single();
 
         if (!alertaExistente) {
           const prioridad = calcularPrioridad(undefined, diasRestantes);
           const tipo: TipoAlerta = diasRestantes <= 0 ? 'documento_vencido' : 'vencimiento_documento';
-          const mensaje = diasRestantes <= 0
-            ? `${doc.nombre} VENCIDO hace ${Math.abs(diasRestantes)} dias`
-            : `${doc.nombre} vence en ${diasRestantes} dias`;
+
+          let mensaje: string;
+          const placaStr = placa ? ` - ${placa}` : '';
+
+          if (diasRestantes <= 0) {
+            mensaje = `${doc.nombre} VENCIDO${placaStr} (${Math.abs(diasRestantes)} dias excedido)`;
+          } else if (diasRestantes <= 7) {
+            mensaje = `${doc.nombre} URGENTE${placaStr} (${diasRestantes} dias restantes)`;
+          } else {
+            mensaje = `${doc.nombre} vence${placaStr} (${diasRestantes} dias restantes)`;
+          }
 
           await crearAlerta({
             vehiculo_id: vehiculoId,
@@ -439,15 +616,30 @@ export async function generarAlertasActualizarKilometraje(): Promise<number> {
  * Genera todas las alertas del sistema
  */
 export async function generarTodasLasAlertas(): Promise<{
-  mantenimientos: number;
+  mantenimientosKm: number;
+  mantenimientosTiempo: number;
   documentos: number;
   kilometraje: number;
+  total: number;
 }> {
-  const [mantenimientos, documentos, kilometraje] = await Promise.all([
+  console.log('[Alertas] Iniciando generacion de alertas...');
+
+  const [mantenimientosKm, mantenimientosTiempo, documentos, kilometraje] = await Promise.all([
     generarAlertasMantenimientoKm(),
+    generarAlertasMantenimientoTiempo(),
     generarAlertasDocumentos(),
     generarAlertasActualizarKilometraje(),
   ]);
 
-  return { mantenimientos, documentos, kilometraje };
+  const total = mantenimientosKm + mantenimientosTiempo + documentos + kilometraje;
+
+  console.log('[Alertas] Generacion completada:', {
+    mantenimientosKm,
+    mantenimientosTiempo,
+    documentos,
+    kilometraje,
+    total,
+  });
+
+  return { mantenimientosKm, mantenimientosTiempo, documentos, kilometraje, total };
 }

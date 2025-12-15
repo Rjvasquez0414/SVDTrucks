@@ -69,6 +69,7 @@ export default function AlertasPage() {
   const [loading, setLoading] = useState(true);
   const [generando, setGenerando] = useState(false);
   const [procesando, setProcesando] = useState<string | null>(null);
+  const [mensajeGeneracion, setMensajeGeneracion] = useState<string | null>(null);
 
   // Cargar alertas
   const cargarAlertas = useCallback(async () => {
@@ -88,12 +89,30 @@ export default function AlertasPage() {
   // Generar nuevas alertas
   const handleGenerarAlertas = async () => {
     setGenerando(true);
+    setMensajeGeneracion(null);
     try {
       const resultado = await generarTodasLasAlertas();
       console.log('Alertas generadas:', resultado);
       await cargarAlertas();
+
+      // Mostrar resultado
+      if (resultado.total > 0) {
+        const partes = [];
+        if (resultado.mantenimientosKm > 0) partes.push(`${resultado.mantenimientosKm} por km`);
+        if (resultado.mantenimientosTiempo > 0) partes.push(`${resultado.mantenimientosTiempo} por tiempo`);
+        if (resultado.documentos > 0) partes.push(`${resultado.documentos} documentos`);
+        if (resultado.kilometraje > 0) partes.push(`${resultado.kilometraje} actualizar km`);
+
+        setMensajeGeneracion(`Se generaron ${resultado.total} nuevas alertas: ${partes.join(', ')}`);
+      } else {
+        setMensajeGeneracion('Sistema al dia - no se generaron nuevas alertas');
+      }
+
+      // Ocultar mensaje despues de 5 segundos
+      setTimeout(() => setMensajeGeneracion(null), 5000);
     } catch (error) {
       console.error('Error generando alertas:', error);
+      setMensajeGeneracion('Error al generar alertas');
     } finally {
       setGenerando(false);
     }
@@ -273,29 +292,45 @@ export default function AlertasPage() {
   return (
     <MainLayout title="Centro de Alertas">
       {/* Header con boton de generar */}
-      <div className="flex items-center justify-between mb-6">
-        <div>
-          <p className="text-sm text-muted-foreground">
-            Alertas activas de mantenimientos y documentos
-          </p>
+      <div className="flex flex-col gap-3 mb-6">
+        <div className="flex items-center justify-between">
+          <div>
+            <p className="text-sm text-muted-foreground">
+              Alertas activas de mantenimientos y documentos
+            </p>
+          </div>
+          <Button
+            variant="outline"
+            onClick={handleGenerarAlertas}
+            disabled={generando}
+          >
+            {generando ? (
+              <>
+                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                Generando...
+              </>
+            ) : (
+              <>
+                <RefreshCw className="h-4 w-4 mr-2" />
+                Actualizar Alertas
+              </>
+            )}
+          </Button>
         </div>
-        <Button
-          variant="outline"
-          onClick={handleGenerarAlertas}
-          disabled={generando}
-        >
-          {generando ? (
-            <>
-              <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-              Generando...
-            </>
-          ) : (
-            <>
-              <RefreshCw className="h-4 w-4 mr-2" />
-              Actualizar Alertas
-            </>
-          )}
-        </Button>
+
+        {/* Mensaje de resultado de generacion */}
+        {mensajeGeneracion && (
+          <div className={cn(
+            "p-3 rounded-lg text-sm",
+            mensajeGeneracion.includes('Error')
+              ? "bg-red-50 text-red-700 border border-red-200"
+              : mensajeGeneracion.includes('generaron')
+                ? "bg-green-50 text-green-700 border border-green-200"
+                : "bg-blue-50 text-blue-700 border border-blue-200"
+          )}>
+            {mensajeGeneracion}
+          </div>
+        )}
       </div>
 
       {/* Summary cards */}
