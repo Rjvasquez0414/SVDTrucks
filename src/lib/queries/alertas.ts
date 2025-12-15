@@ -297,7 +297,7 @@ export async function generarAlertasMantenimientoKm(): Promise<number> {
           .in('tipo', ['mantenimiento_kilometraje', 'mantenimiento_pendiente'])
           .eq('estado', 'pendiente')
           .eq('kilometraje_limite', proximoKm)
-          .single();
+          .maybeSingle();
 
         if (!alertaExistente) {
           const prioridad = calcularPrioridad(kmRestantes);
@@ -406,7 +406,7 @@ export async function generarAlertasMantenimientoTiempo(): Promise<number> {
           .eq('tipo', 'mantenimiento_tiempo')
           .eq('estado', 'pendiente')
           .eq('fecha_limite', fechaLimiteStr)
-          .single();
+          .maybeSingle();
 
         if (!alertaExistente) {
           const prioridad = calcularPrioridad(undefined, diasRestantes);
@@ -538,7 +538,7 @@ export async function generarAlertasDocumentos(): Promise<number> {
           .eq('estado', 'pendiente')
           .eq('fecha_limite', doc.fecha_vencimiento)
           .ilike('mensaje', `%${doc.nombre}%`)
-          .single();
+          .maybeSingle();
 
         if (!alertaExistente) {
           const prioridad = calcularPrioridad(undefined, diasRestantes);
@@ -622,7 +622,7 @@ export async function generarAlertasActualizarKilometraje(): Promise<number> {
         .eq('vehiculo_id', vehiculo.id)
         .eq('tipo', 'actualizar_kilometraje')
         .eq('estado', 'pendiente')
-        .single();
+        .maybeSingle();
 
       if (!alertaExistente) {
         // Calcular prioridad basada en dias sin actualizar
