@@ -199,10 +199,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     try {
       console.log('[Auth] Iniciando registro para:', email);
 
-      // 1. Crear usuario en Supabase Auth
+      // 1. Crear usuario en Supabase Auth (el trigger creara el perfil automaticamente)
       const { data: authData, error: authError } = await supabase.auth.signUp({
         email: email.toLowerCase().trim(),
         password,
+        options: {
+          data: {
+            nombre: nombre.trim(),
+          },
+        },
       });
 
       if (authError) {
@@ -220,32 +225,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         return { success: false, error: 'Error al crear usuario' };
       }
 
-      console.log('[Auth] Usuario creado en Auth, creando perfil...');
+      console.log('[Auth] Usuario creado, el trigger creara el perfil automaticamente');
 
-      // 2. Crear perfil en tabla usuarios
-      const { error: profileError } = await (supabase as any)
-        .from('usuarios')
-        .insert({
-          id: authData.user.id,
-          nombre: nombre.trim(),
-          email: email.toLowerCase().trim(),
-          rol: 'operador', // Por defecto, nuevos usuarios son operadores
-          activo: true,
-        });
+      // Esperar un momento para que el trigger cree el perfil
+      await new Promise(resolve => setTimeout(resolve, 500));
 
-      if (profileError) {
-        console.error('[Auth] Error creando perfil:', profileError);
-        // Si falla crear el perfil, cerrar sesion (no podemos eliminar el usuario desde el cliente)
-        await supabase.auth.signOut();
-        return { success: false, error: 'Error al crear perfil de usuario. Contacta al administrador.' };
-      }
-
-      console.log('[Auth] Registro exitoso para:', nombre);
-
-      // 3. Obtener el perfil creado
+      // Obtener el perfil creado por el trigger
       const profile = await fetchUserProfile(authData.user);
       if (profile) {
         setUsuario(profile);
+        console.log('[Auth] Registro exitoso para:', profile.nombre);
       }
 
       return { success: true };
