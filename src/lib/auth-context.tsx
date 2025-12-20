@@ -235,9 +235,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
       if (profileError) {
         console.error('[Auth] Error creando perfil:', profileError);
-        // Si falla crear el perfil, eliminar el usuario de auth
-        await supabase.auth.admin?.deleteUser(authData.user.id);
-        return { success: false, error: 'Error al crear perfil de usuario' };
+        // Si falla crear el perfil, cerrar sesion (no podemos eliminar el usuario desde el cliente)
+        await supabase.auth.signOut();
+        return { success: false, error: 'Error al crear perfil de usuario. Contacta al administrador.' };
       }
 
       console.log('[Auth] Registro exitoso para:', nombre);
