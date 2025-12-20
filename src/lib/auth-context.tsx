@@ -19,6 +19,7 @@ interface AuthContextType {
   isLoading: boolean;
   isAuthenticated: boolean;
   login: (email: string, password: string) => Promise<{ success: boolean; error?: string }>;
+  register: (nombre: string, email: string, password: string) => Promise<{ success: boolean; error?: string }>;
   logout: () => Promise<void>;
 }
 
@@ -194,6 +195,66 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   };
 
+  const register = async (nombre: string, email: string, password: string): Promise<{ success: boolean; error?: string }> => {
+    try {
+      console.log('[Auth] Iniciando registro para:', email);
+
+      // 1. Crear usuario en Supabase Auth
+      const { data: authData, error: authError } = await supabase.auth.signUp({
+        email: email.toLowerCase().trim(),
+        password,
+      });
+
+      if (authError) {
+        console.error('[Auth] Error en signUp:', authError.message);
+        if (authError.message.includes('already registered')) {
+          return { success: false, error: 'Este correo ya esta registrado' };
+        }
+        if (authError.message.includes('Password')) {
+          return { success: false, error: 'La contrasena debe tener al menos 6 caracteres' };
+        }
+        return { success: false, error: authError.message };
+      }
+
+      if (!authData.user) {
+        return { success: false, error: 'Error al crear usuario' };
+      }
+
+      console.log('[Auth] Usuario creado en Auth, creando perfil...');
+
+      // 2. Crear perfil en tabla usuarios
+      const { error: profileError } = await (supabase as any)
+        .from('usuarios')
+        .insert({
+          id: authData.user.id,
+          nombre: nombre.trim(),
+          email: email.toLowerCase().trim(),
+          rol: 'operador', // Por defecto, nuevos usuarios son operadores
+          activo: true,
+        });
+
+      if (profileError) {
+        console.error('[Auth] Error creando perfil:', profileError);
+        // Si falla crear el perfil, eliminar el usuario de auth
+        await supabase.auth.admin?.deleteUser(authData.user.id);
+        return { success: false, error: 'Error al crear perfil de usuario' };
+      }
+
+      console.log('[Auth] Registro exitoso para:', nombre);
+
+      // 3. Obtener el perfil creado
+      const profile = await fetchUserProfile(authData.user);
+      if (profile) {
+        setUsuario(profile);
+      }
+
+      return { success: true };
+    } catch (error) {
+      console.error('[Auth] Register error:', error);
+      return { success: false, error: 'Error de conexion' };
+    }
+  };
+
   const logout = async () => {
     await supabase.auth.signOut();
     setUsuario(null);
@@ -207,6 +268,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         isLoading,
         isAuthenticated: !!usuario,
         login,
+        register,
         logout,
       }}
     >

@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
+import Link from 'next/link';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -117,6 +118,14 @@ export default function LoginPage() {
                   'Ingresar'
                 )}
               </Button>
+
+              {/* Link a registro */}
+              <p className="text-center text-sm text-muted-foreground">
+                No tienes cuenta?{' '}
+                <Link href="/registro" className="text-primary hover:underline font-medium">
+                  Registrate aqui
+                </Link>
+              </p>
             </form>
           </CardContent>
         </Card>

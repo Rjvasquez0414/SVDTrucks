@@ -1,0 +1,550 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Cotización - Sistema SVD Trucks</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      color: #333;
+      line-height: 1.6;
+      padding: 40px;
+      max-width: 800px;
+      margin: 0 auto;
+      background: #fff;
+    }
+
+    .header {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      border-bottom: 3px solid #2563eb;
+      padding-bottom: 20px;
+      margin-bottom: 30px;
+    }
+
+    .logo-section h1 {
+      color: #2563eb;
+      font-size: 28px;
+      font-weight: 700;
+    }
+
+    .logo-section p {
+      color: #666;
+      font-size: 14px;
+    }
+
+    .quote-info {
+      text-align: right;
+    }
+
+    .quote-info h2 {
+      color: #2563eb;
+      font-size: 24px;
+      margin-bottom: 5px;
+    }
+
+    .quote-info p {
+      font-size: 13px;
+      color: #666;
+    }
+
+    .parties {
+      display: flex;
+      justify-content: space-between;
+      margin-bottom: 30px;
+      gap: 40px;
+    }
+
+    .party {
+      flex: 1;
+    }
+
+    .party h3 {
+      color: #2563eb;
+      font-size: 14px;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+      margin-bottom: 10px;
+      border-bottom: 1px solid #e5e7eb;
+      padding-bottom: 5px;
+    }
+
+    .party p {
+      font-size: 14px;
+      margin-bottom: 3px;
+    }
+
+    .party .name {
+      font-weight: 600;
+      font-size: 16px;
+    }
+
+    .project-title {
+      background: linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%);
+      color: white;
+      padding: 15px 20px;
+      border-radius: 8px;
+      margin-bottom: 25px;
+    }
+
+    .project-title h3 {
+      font-size: 18px;
+      margin-bottom: 5px;
+    }
+
+    .project-title p {
+      font-size: 13px;
+      opacity: 0.9;
+    }
+
+    .section {
+      margin-bottom: 25px;
+    }
+
+    .section h4 {
+      color: #1f2937;
+      font-size: 16px;
+      margin-bottom: 12px;
+      padding-bottom: 5px;
+      border-bottom: 2px solid #e5e7eb;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-bottom: 20px;
+    }
+
+    th {
+      background: #f3f4f6;
+      padding: 12px 15px;
+      text-align: left;
+      font-size: 13px;
+      font-weight: 600;
+      color: #374151;
+      border-bottom: 2px solid #e5e7eb;
+    }
+
+    th:last-child {
+      text-align: right;
+    }
+
+    td {
+      padding: 12px 15px;
+      border-bottom: 1px solid #e5e7eb;
+      font-size: 14px;
+    }
+
+    td:last-child {
+      text-align: right;
+      font-weight: 500;
+    }
+
+    .item-desc {
+      color: #6b7280;
+      font-size: 12px;
+      margin-top: 3px;
+    }
+
+    .subtotal-row td {
+      font-weight: 600;
+      background: #f9fafb;
+    }
+
+    .total-section {
+      background: #f3f4f6;
+      padding: 20px;
+      border-radius: 8px;
+      margin-top: 20px;
+    }
+
+    .total-row {
+      display: flex;
+      justify-content: space-between;
+      margin-bottom: 8px;
+      font-size: 14px;
+    }
+
+    .total-row.grand-total {
+      font-size: 20px;
+      font-weight: 700;
+      color: #2563eb;
+      border-top: 2px solid #2563eb;
+      padding-top: 12px;
+      margin-top: 12px;
+    }
+
+    .features-list {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
+      margin-top: 10px;
+    }
+
+    .features-list li {
+      font-size: 13px;
+      color: #4b5563;
+      list-style: none;
+      padding-left: 20px;
+      position: relative;
+    }
+
+    .features-list li::before {
+      content: "✓";
+      position: absolute;
+      left: 0;
+      color: #10b981;
+      font-weight: bold;
+    }
+
+    .terms {
+      background: #fefce8;
+      border: 1px solid #fde047;
+      border-radius: 8px;
+      padding: 15px;
+      margin-top: 25px;
+    }
+
+    .terms h4 {
+      color: #854d0e;
+      font-size: 14px;
+      margin-bottom: 10px;
+      border: none;
+      padding: 0;
+    }
+
+    .terms ul {
+      font-size: 13px;
+      color: #713f12;
+      padding-left: 20px;
+    }
+
+    .terms li {
+      margin-bottom: 5px;
+    }
+
+    .footer {
+      margin-top: 40px;
+      padding-top: 20px;
+      border-top: 1px solid #e5e7eb;
+      text-align: center;
+      color: #6b7280;
+      font-size: 12px;
+    }
+
+    .signature-section {
+      display: flex;
+      justify-content: space-between;
+      margin-top: 50px;
+      gap: 40px;
+    }
+
+    .signature-box {
+      flex: 1;
+      text-align: center;
+    }
+
+    .signature-line {
+      border-top: 1px solid #333;
+      margin-top: 60px;
+      padding-top: 10px;
+      font-size: 13px;
+    }
+
+    .validity {
+      background: #ecfdf5;
+      border: 1px solid #10b981;
+      border-radius: 8px;
+      padding: 12px 15px;
+      margin-top: 20px;
+      text-align: center;
+    }
+
+    .validity p {
+      color: #065f46;
+      font-size: 13px;
+    }
+
+    @media print {
+      body {
+        padding: 20px;
+      }
+
+      .header {
+        page-break-after: avoid;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <div class="logo-section">
+      <h1>Roberto Vásquez</h1>
+      <p>Desarrollo de Software</p>
+      <p>Ingeniero de Sistemas (en formación)</p>
+    </div>
+    <div class="quote-info">
+      <h2>COTIZACIÓN</h2>
+      <p><strong>No.</strong> COT-2024-001</p>
+      <p><strong>Fecha:</strong> 19 de Diciembre, 2024</p>
+      <p><strong>Válida hasta:</strong> 19 de Enero, 2025</p>
+    </div>
+  </div>
+
+  <div class="parties">
+    <div class="party">
+      <h3>Proveedor</h3>
+      <p class="name">Roberto José Vásquez Dávila</p>
+      <p>Desarrollador de Software</p>
+      <p>Estudiante Ing. Sistemas - 7° Semestre</p>
+      <p>Email: [tu-email@ejemplo.com]</p>
+      <p>Tel: [tu-teléfono]</p>
+    </div>
+    <div class="party">
+      <h3>Cliente</h3>
+      <p class="name">[Nombre del Cliente / Empresa]</p>
+      <p>NIT/CC: [Número de identificación]</p>
+      <p>Dirección: [Dirección del cliente]</p>
+      <p>Email: [email-cliente]</p>
+      <p>Tel: [teléfono-cliente]</p>
+    </div>
+  </div>
+
+  <div class="project-title">
+    <h3>Sistema de Gestión de Flota Vehicular - SVD Trucks</h3>
+    <p>Aplicación web para administración integral de vehículos, mantenimientos, documentación y alertas</p>
+  </div>
+
+  <div class="section">
+    <h4>1. Desarrollo de Software</h4>
+    <table>
+      <thead>
+        <tr>
+          <th>Módulo</th>
+          <th>Descripción</th>
+          <th>Valor</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><strong>Configuración Base</strong></td>
+          <td>
+            <div class="item-desc">Arquitectura, base de datos, autenticación y seguridad</div>
+          </td>
+          <td>$800,000</td>
+        </tr>
+        <tr>
+          <td><strong>Gestión de Vehículos</strong></td>
+          <td>
+            <div class="item-desc">CRUD, listados, filtros, conductores y remolques</div>
+          </td>
+          <td>$1,100,000</td>
+        </tr>
+        <tr>
+          <td><strong>Mantenimientos</strong></td>
+          <td>
+            <div class="item-desc">Registro, historial, catálogo, seguimiento km/tiempo</div>
+          </td>
+          <td>$1,200,000</td>
+        </tr>
+        <tr>
+          <td><strong>Sistema de Alertas</strong></td>
+          <td>
+            <div class="item-desc">Alertas automáticas por km, tiempo y documentos</div>
+          </td>
+          <td>$1,000,000</td>
+        </tr>
+        <tr>
+          <td><strong>Documentación Legal</strong></td>
+          <td>
+            <div class="item-desc">Gestión de documentos, vencimientos, categorías</div>
+          </td>
+          <td>$900,000</td>
+        </tr>
+        <tr>
+          <td><strong>Dashboard</strong></td>
+          <td>
+            <div class="item-desc">Panel principal con métricas e indicadores</div>
+          </td>
+          <td>$700,000</td>
+        </tr>
+        <tr>
+          <td><strong>Interfaz de Usuario</strong></td>
+          <td>
+            <div class="item-desc">Diseño responsivo, componentes modernos</div>
+          </td>
+          <td>$740,000</td>
+        </tr>
+        <tr class="subtotal-row">
+          <td colspan="2"><strong>Subtotal Desarrollo</strong></td>
+          <td><strong>$6,440,000</strong></td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="section">
+    <h4>2. Infraestructura (Primer Año)</h4>
+    <table>
+      <thead>
+        <tr>
+          <th>Servicio</th>
+          <th>Descripción</th>
+          <th>Valor</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><strong>Hosting Vercel</strong></td>
+          <td>Plan gratuito (suficiente para el proyecto)</td>
+          <td>$0</td>
+        </tr>
+        <tr>
+          <td><strong>Supabase</strong></td>
+          <td>Plan gratuito (500MB DB, 50K usuarios)</td>
+          <td>$0</td>
+        </tr>
+        <tr>
+          <td><strong>Dominio .com</strong></td>
+          <td>Registro anual (opcional)</td>
+          <td>$60,000</td>
+        </tr>
+        <tr class="subtotal-row">
+          <td colspan="2"><strong>Subtotal Infraestructura</strong></td>
+          <td><strong>$60,000</strong></td>
+        </tr>
+      </tbody>
+    </table>
+    <p style="font-size: 12px; color: #6b7280; margin-top: -10px;">
+      * Los planes gratuitos son suficientes para una flota de hasta 50 vehículos.
+      Si crece, se pueden actualizar después.
+    </p>
+  </div>
+
+  <div class="section">
+    <h4>3. Servicios Incluidos</h4>
+    <table>
+      <thead>
+        <tr>
+          <th>Servicio</th>
+          <th>Descripción</th>
+          <th>Valor</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><strong>Despliegue</strong></td>
+          <td>Publicación en producción y configuración</td>
+          <td>Incluido</td>
+        </tr>
+        <tr>
+          <td><strong>Capacitación</strong></td>
+          <td>Explicación del uso del sistema (2 horas)</td>
+          <td>Incluido</td>
+        </tr>
+        <tr>
+          <td><strong>Código Fuente</strong></td>
+          <td>Entrega completa del proyecto</td>
+          <td>Incluido</td>
+        </tr>
+        <tr>
+          <td><strong>Soporte</strong></td>
+          <td>15 días de corrección de errores</td>
+          <td>Incluido</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="total-section">
+    <div class="total-row">
+      <span>Desarrollo de Software:</span>
+      <span>$6,440,000</span>
+    </div>
+    <div class="total-row">
+      <span>Infraestructura (dominio opcional):</span>
+      <span>$60,000</span>
+    </div>
+    <div class="total-row grand-total">
+      <span>TOTAL:</span>
+      <span>$6,500,000 COP</span>
+    </div>
+  </div>
+
+  <div class="section" style="margin-top: 30px;">
+    <h4>Funcionalidades Incluidas</h4>
+    <ul class="features-list">
+      <li>Dashboard con métricas en tiempo real</li>
+      <li>Gestión completa de vehículos</li>
+      <li>Registro de conductores y remolques</li>
+      <li>Sistema de mantenimientos preventivos</li>
+      <li>Sistema de mantenimientos correctivos</li>
+      <li>Alertas automáticas por kilometraje</li>
+      <li>Alertas automáticas por tiempo</li>
+      <li>Alertas de documentos por vencer</li>
+      <li>Gestión de documentación legal</li>
+      <li>Control de vencimientos SOAT/Técnico</li>
+      <li>Catálogo de tipos de mantenimiento</li>
+      <li>Historial completo por vehículo</li>
+      <li>Filtros y búsqueda avanzada</li>
+      <li>Diseño responsivo (móvil/desktop)</li>
+      <li>Sistema de roles (admin/operador)</li>
+      <li>Autenticación segura</li>
+    </ul>
+  </div>
+
+  <div class="section" style="margin-top: 30px;">
+    <h4>Tecnologías Utilizadas</h4>
+    <p style="font-size: 14px; color: #4b5563;">
+      <strong>Frontend:</strong> Next.js 14, React 18, TypeScript, Tailwind CSS<br>
+      <strong>Backend:</strong> Supabase (PostgreSQL)<br>
+      <strong>Hosting:</strong> Vercel<br>
+      <strong>Autenticación:</strong> Supabase Auth
+    </p>
+  </div>
+
+  <div class="terms">
+    <h4>Términos y Condiciones</h4>
+    <ul>
+      <li><strong>Forma de pago:</strong> 50% anticipo, 50% contra entrega</li>
+      <li><strong>Tiempo de entrega:</strong> Sistema ya desarrollado - entrega inmediata</li>
+      <li><strong>Revisiones:</strong> Se incluyen ajustes menores</li>
+      <li><strong>Código fuente:</strong> Se entrega al cliente</li>
+      <li><strong>Garantía:</strong> 15 días de corrección de errores</li>
+      <li><strong>Modificaciones mayores:</strong> Se cotizan por separado</li>
+    </ul>
+  </div>
+
+  <div class="validity">
+    <p><strong>Esta cotización tiene una validez de 30 días</strong> a partir de la fecha de emisión.</p>
+  </div>
+
+  <div class="signature-section">
+    <div class="signature-box">
+      <div class="signature-line">
+        <strong>Roberto José Vásquez Dávila</strong><br>
+        Desarrollador
+      </div>
+    </div>
+    <div class="signature-box">
+      <div class="signature-line">
+        <strong>[Nombre del Cliente]</strong><br>
+        Cliente
+      </div>
+    </div>
+  </div>
+
+  <div class="footer">
+    <p>Gracias por su confianza.</p>
+    <p style="margin-top: 5px;">Roberto José Vásquez Dávila | Desarrollo de Software</p>
+  </div>
+</body>
+</html>
