@@ -10,7 +10,7 @@ interface ProtectedRouteProps {
 }
 
 // Rutas que no requieren autenticacion
-const PUBLIC_ROUTES = ['/login'];
+const PUBLIC_ROUTES = ['/login', '/registro'];
 
 export function ProtectedRoute({ children }: ProtectedRouteProps) {
   const { isAuthenticated, isLoading } = useAuth();
