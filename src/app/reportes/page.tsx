@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { MainLayout } from '@/components/layout/MainLayout';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -17,10 +17,17 @@ import {
   Cell,
   Legend,
 } from 'recharts';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 import { getVehiculos } from '@/lib/queries/vehiculos';
-import { getMantenimientos, getCostosPorMes, type MantenimientoConVehiculo } from '@/lib/queries/mantenimientos';
+import { getMantenimientos, type MantenimientoConVehiculo } from '@/lib/queries/mantenimientos';
 import { getCategoriaInfo } from '@/data/tipos-mantenimiento';
-import { DollarSign, Wrench, Truck, Loader2 } from 'lucide-react';
+import { DollarSign, Wrench, Truck, Loader2, Calendar } from 'lucide-react';
 import type { VehiculoCompleto } from '@/types/database';
 
 const COLORS = ['#3b82f6', '#22c55e', '#f97316', '#eab308', '#8b5cf6', '#ec4899'];
@@ -40,12 +47,41 @@ const formatearPesosCompleto = (valor: number) => {
   }).format(valor);
 };
 
+// Generar lista de años disponibles (desde 2020 hasta el año actual)
+const generarAñosDisponibles = () => {
+  const añoActual = new Date().getFullYear();
+  const años: number[] = [];
+  for (let año = añoActual; año >= 2020; año--) {
+    años.push(año);
+  }
+  return años;
+};
+
+const añosDisponibles = generarAñosDisponibles();
+
 export default function ReportesPage() {
   const [mantenimientos, setMantenimientos] = useState<MantenimientoConVehiculo[]>([]);
   const [vehiculos, setVehiculos] = useState<VehiculoCompleto[]>([]);
-  const [costosPorMes, setCostosPorMes] = useState<{ mes: string; preventivo: number; correctivo: number }[]>([]);
   const [loading, setLoading] = useState(true);
+  const [añoSeleccionado, setAñoSeleccionado] = useState(new Date().getFullYear());
 
+  // Calcular costos por mes usando useMemo (se recalcula cuando cambian mantenimientos o año)
+  const costosPorMes = useMemo(() => {
+    const meses = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'];
+    return meses.map((mesNombre, index) => {
+      const mantsMes = mantenimientos.filter(m => {
+        const fecha = new Date(m.fecha);
+        return fecha.getFullYear() === añoSeleccionado && fecha.getMonth() === index;
+      });
+      return {
+        mes: mesNombre,
+        preventivo: mantsMes.filter(m => m.tipo === 'preventivo').reduce((sum, m) => sum + (m.costo || 0), 0),
+        correctivo: mantsMes.filter(m => m.tipo === 'correctivo').reduce((sum, m) => sum + (m.costo || 0), 0),
+      };
+    });
+  }, [mantenimientos, añoSeleccionado]);
+
+  // Cargar datos iniciales
   useEffect(() => {
     async function loadData() {
       const [mantsData, vehsData] = await Promise.all([
@@ -54,47 +90,32 @@ export default function ReportesPage() {
       ]);
       setMantenimientos(mantsData);
       setVehiculos(vehsData);
-
-      // Calcular costos por mes del año actual
-      const año = new Date().getFullYear();
-      const costosData = await getCostosPorMes(año);
-
-      // Convertir a formato del gráfico
-      const meses = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'];
-      const costosMensuales = meses.map((mesNombre, index) => {
-        const mes = index + 1;
-        const mantsMes = mantsData.filter(m => {
-          const fecha = new Date(m.fecha);
-          return fecha.getFullYear() === año && fecha.getMonth() === index;
-        });
-        return {
-          mes: mesNombre,
-          preventivo: mantsMes.filter(m => m.tipo === 'preventivo').reduce((sum, m) => sum + (m.costo || 0), 0),
-          correctivo: mantsMes.filter(m => m.tipo === 'correctivo').reduce((sum, m) => sum + (m.costo || 0), 0),
-        };
-      });
-      setCostosPorMes(costosMensuales);
-
       setLoading(false);
     }
     loadData();
   }, []);
 
-  // Calcular estadísticas
-  const costoTotalGeneral = mantenimientos.reduce((sum, m) => sum + (m.costo || 0), 0);
-  const totalMantenimientos = mantenimientos.length;
+  // Filtrar mantenimientos del año seleccionado para estadísticas
+  const mantenimientosAño = mantenimientos.filter(m => {
+    const fecha = new Date(m.fecha);
+    return fecha.getFullYear() === añoSeleccionado;
+  });
+
+  // Calcular estadísticas del año seleccionado
+  const costoTotalGeneral = mantenimientosAño.reduce((sum, m) => sum + (m.costo || 0), 0);
+  const totalMantenimientos = mantenimientosAño.length;
   const mesesConDatos = costosPorMes.filter(c => c.preventivo > 0 || c.correctivo > 0).length;
   const promedioMensual = mesesConDatos > 0 ? costoTotalGeneral / mesesConDatos : 0;
 
-  // Distribución por tipo
+  // Distribución por tipo (del año seleccionado)
   const distribucionTipo = [
-    { name: 'Preventivo', value: mantenimientos.filter((m) => m.tipo === 'preventivo').length, color: '#3b82f6' },
-    { name: 'Correctivo', value: mantenimientos.filter((m) => m.tipo === 'correctivo').length, color: '#f97316' },
+    { name: 'Preventivo', value: mantenimientosAño.filter((m) => m.tipo === 'preventivo').length, color: '#3b82f6' },
+    { name: 'Correctivo', value: mantenimientosAño.filter((m) => m.tipo === 'correctivo').length, color: '#f97316' },
   ];
 
-  // Costos por vehículo
+  // Costos por vehículo (del año seleccionado)
   const costosPorVehiculo = vehiculos.map((v) => {
-    const costoTotal = mantenimientos
+    const costoTotal = mantenimientosAño
       .filter((m) => m.vehiculo_id === v.id)
       .reduce((sum, m) => sum + (m.costo || 0), 0);
     return {
@@ -102,12 +123,12 @@ export default function ReportesPage() {
       marca: v.marca,
       modelo: v.modelo,
       costo: costoTotal,
-      mantenimientos: mantenimientos.filter((m) => m.vehiculo_id === v.id).length,
+      mantenimientos: mantenimientosAño.filter((m) => m.vehiculo_id === v.id).length,
     };
   }).sort((a, b) => b.costo - a.costo);
 
-  // Distribución por categoría
-  const categorias = mantenimientos.reduce((acc, m) => {
+  // Distribución por categoría (del año seleccionado)
+  const categorias = mantenimientosAño.reduce((acc, m) => {
     const info = getCategoriaInfo(m.categoria);
     const nombre = info?.nombre || m.categoria;
     acc[nombre] = (acc[nombre] || 0) + 1;
@@ -131,6 +152,29 @@ export default function ReportesPage() {
 
   return (
     <MainLayout title="Reportes y Analisis">
+      {/* Selector de año */}
+      <div className="flex items-center justify-between mb-6">
+        <div className="flex items-center gap-2 text-muted-foreground">
+          <Calendar className="h-4 w-4" />
+          <span className="text-sm">Mostrando datos de:</span>
+        </div>
+        <Select
+          value={añoSeleccionado.toString()}
+          onValueChange={(value) => setAñoSeleccionado(parseInt(value))}
+        >
+          <SelectTrigger className="w-32">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            {añosDisponibles.map((año) => (
+              <SelectItem key={año} value={año.toString()}>
+                {año}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </div>
+
       {/* Summary Cards */}
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <Card>
@@ -203,7 +247,7 @@ export default function ReportesPage() {
         <TabsContent value="costos" className="mt-4">
           <Card>
             <CardHeader>
-              <CardTitle className="text-base">Evolucion de Costos Mensuales ({new Date().getFullYear()})</CardTitle>
+              <CardTitle className="text-base">Evolucion de Costos Mensuales ({añoSeleccionado})</CardTitle>
             </CardHeader>
             <CardContent>
               <div className="h-[400px]">
@@ -333,7 +377,7 @@ export default function ReportesPage() {
                           cy="50%"
                           outerRadius={100}
                           dataKey="value"
-                          label={({ name, value }) => `${value}`}
+                          label={({ value }) => `${value}`}
                         >
                           {distribucionCategoria.map((entry, index) => (
                             <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />

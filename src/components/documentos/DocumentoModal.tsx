@@ -11,6 +11,13 @@ import {
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 import { Loader2, Upload, FileText, X, File } from 'lucide-react';
 import type { TipoDocumento, CategoriaDocumento, DocumentoInsert } from '@/types/database';
 import { createDocumento } from '@/lib/queries/documentos';
@@ -67,16 +74,19 @@ export function DocumentoModal({
   const [error, setError] = useState<string | null>(null);
   const [fechaVencimiento, setFechaVencimiento] = useState('');
   const [archivo, setArchivo] = useState<File | null>(null);
+  const [tipoSeleccionado, setTipoSeleccionado] = useState<TipoDocumento | ''>(tipoPreseleccionado || '');
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const documentosCategoria = catalogoDocumentos[categoria] || [];
-  const docInfo = documentosCategoria.find(d => d.tipo === tipoPreseleccionado);
-  const nombreDocumento = docInfo?.nombre || tipoPreseleccionado || '';
+  const tipoActual = tipoPreseleccionado || tipoSeleccionado;
+  const docInfo = documentosCategoria.find(d => d.tipo === tipoActual);
+  const nombreDocumento = docInfo?.nombre || tipoActual || 'Nuevo Documento';
 
   const resetForm = () => {
     setFechaVencimiento('');
     setArchivo(null);
     setError(null);
+    setTipoSeleccionado(tipoPreseleccionado || '');
     if (fileInputRef.current) {
       fileInputRef.current.value = '';
     }
@@ -113,7 +123,7 @@ export function DocumentoModal({
   const uploadFile = async (file: File): Promise<{ url: string; nombre: string } | null> => {
     try {
       const fileExt = file.name.split('.').pop();
-      const fileName = `${tipoPreseleccionado}_${Date.now()}.${fileExt}`;
+      const fileName = `${tipoActual}_${Date.now()}.${fileExt}`;
       const filePath = `documentos/${vehiculoId}/${fileName}`;
 
       const { error: uploadError } = await supabase.storage
@@ -140,8 +150,8 @@ export function DocumentoModal({
     e.preventDefault();
     setError(null);
 
-    if (!tipoPreseleccionado) {
-      setError('Tipo de documento no especificado');
+    if (!tipoActual) {
+      setError('Selecciona un tipo de documento');
       return;
     }
 
@@ -151,33 +161,37 @@ export function DocumentoModal({
     }
 
     // Determinar a que entidad asignar el documento
-    let entityId: { vehiculo_id?: string; remolque_id?: string; conductor_id?: string } = {};
-
-    if (categoria === 'cabezote') {
-      entityId.vehiculo_id = vehiculoId;
-    } else if (categoria === 'tanque') {
-      if (!remolqueId) {
-        setError('No hay remolque asignado a este vehiculo');
-        return;
-      }
-      entityId.remolque_id = remolqueId;
-    } else if (categoria === 'conductor') {
-      if (!conductorId) {
-        setError('No hay conductor asignado a este vehiculo');
-        return;
-      }
-      entityId.conductor_id = conductorId;
-    } else if (categoria === 'polizas') {
-      if (tipoPreseleccionado === 'poliza_todo_riesgo_tanque') {
+    const getEntityId = (): { vehiculo_id?: string; remolque_id?: string; conductor_id?: string } | null => {
+      if (categoria === 'cabezote') {
+        return { vehiculo_id: vehiculoId };
+      } else if (categoria === 'tanque') {
         if (!remolqueId) {
-          setError('No hay remolque asignado para esta poliza');
-          return;
+          setError('No hay remolque asignado a este vehiculo');
+          return null;
         }
-        entityId.remolque_id = remolqueId;
-      } else {
-        entityId.vehiculo_id = vehiculoId;
+        return { remolque_id: remolqueId };
+      } else if (categoria === 'conductor') {
+        if (!conductorId) {
+          setError('No hay conductor asignado a este vehiculo');
+          return null;
+        }
+        return { conductor_id: conductorId };
+      } else if (categoria === 'polizas') {
+        if (tipoActual === 'poliza_todo_riesgo_tanque') {
+          if (!remolqueId) {
+            setError('No hay remolque asignado para esta poliza');
+            return null;
+          }
+          return { remolque_id: remolqueId };
+        } else {
+          return { vehiculo_id: vehiculoId };
+        }
       }
-    }
+      return {};
+    };
+
+    const entityId = getEntityId();
+    if (entityId === null) return;
 
     setIsLoading(true);
 
@@ -195,7 +209,7 @@ export function DocumentoModal({
       }
 
       const documento: DocumentoInsert = {
-        tipo: tipoPreseleccionado,
+        tipo: tipoActual as TipoDocumento,
         categoria,
         nombre: nombreDocumento,
         ...entityId,
@@ -229,6 +243,28 @@ export function DocumentoModal({
           {error && (
             <div className="rounded-md bg-destructive/10 p-3 text-sm text-destructive">
               {error}
+            </div>
+          )}
+
+          {/* Selector de tipo de documento (solo si no hay tipo preseleccionado) */}
+          {!tipoPreseleccionado && (
+            <div className="space-y-2">
+              <Label htmlFor="tipoDocumento">Tipo de Documento *</Label>
+              <Select
+                value={tipoSeleccionado}
+                onValueChange={(value) => setTipoSeleccionado(value as TipoDocumento)}
+              >
+                <SelectTrigger id="tipoDocumento">
+                  <SelectValue placeholder="Seleccionar tipo de documento" />
+                </SelectTrigger>
+                <SelectContent>
+                  {documentosCategoria.map((doc) => (
+                    <SelectItem key={doc.tipo} value={doc.tipo}>
+                      {doc.nombre}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
           )}
 

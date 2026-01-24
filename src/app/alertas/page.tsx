@@ -82,8 +82,36 @@ export default function AlertasPage() {
     setLoading(false);
   }, []);
 
+  // Generar alertas automaticamente al cargar la pagina
   useEffect(() => {
-    cargarAlertas();
+    async function initAlertas() {
+      setLoading(true);
+      setMensajeGeneracion('Verificando alertas...');
+      try {
+        // Generar alertas automaticamente
+        const resultado = await generarTodasLasAlertas();
+
+        // Mostrar resultado solo si se generaron nuevas alertas
+        if (resultado.total > 0) {
+          const partes = [];
+          if (resultado.mantenimientosKm > 0) partes.push(`${resultado.mantenimientosKm} por km`);
+          if (resultado.mantenimientosTiempo > 0) partes.push(`${resultado.mantenimientosTiempo} por tiempo`);
+          if (resultado.documentos > 0) partes.push(`${resultado.documentos} documentos`);
+          if (resultado.kilometraje > 0) partes.push(`${resultado.kilometraje} actualizar km`);
+          setMensajeGeneracion(`Se generaron ${resultado.total} nuevas alertas: ${partes.join(', ')}`);
+          setTimeout(() => setMensajeGeneracion(null), 5000);
+        } else {
+          setMensajeGeneracion(null);
+        }
+      } catch (error) {
+        console.error('Error generando alertas:', error);
+        setMensajeGeneracion(null);
+      }
+
+      // Cargar las alertas
+      await cargarAlertas();
+    }
+    initAlertas();
   }, [cargarAlertas]);
 
   // Generar nuevas alertas

@@ -4,10 +4,11 @@ import { useState, useEffect } from 'react';
 import { MainLayout } from '@/components/layout/MainLayout';
 import { StatCard } from '@/components/dashboard/StatCard';
 import { FlotaResumen } from '@/components/dashboard/FlotaResumen';
+import { AlertasRecientes } from '@/components/dashboard/AlertasRecientes';
+import { ProximosMantenimientos } from '@/components/dashboard/ProximosMantenimientos';
 import { getEstadisticasFlota, getVehiculos } from '@/lib/queries/vehiculos';
 import { Truck, AlertTriangle, Wrench, DollarSign, Loader2 } from 'lucide-react';
 import { VehiculoCompleto } from '@/types/database';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 
 export default function DashboardPage() {
   const [loading, setLoading] = useState(true);
@@ -83,35 +84,10 @@ export default function DashboardPage() {
         <FlotaResumen vehiculos={vehiculos} />
       </div>
 
-      {/* Placeholder sections */}
+      {/* Alertas y Mantenimientos */}
       <div className="mt-6 grid gap-6 lg:grid-cols-2">
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-base">Alertas Recientes</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="flex flex-col items-center justify-center py-8 text-center">
-              <AlertTriangle className="h-10 w-10 text-muted-foreground/30" />
-              <p className="mt-2 text-sm text-muted-foreground">
-                No hay alertas registradas
-              </p>
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-base">Proximos Mantenimientos</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="flex flex-col items-center justify-center py-8 text-center">
-              <Wrench className="h-10 w-10 text-muted-foreground/30" />
-              <p className="mt-2 text-sm text-muted-foreground">
-                No hay mantenimientos programados
-              </p>
-            </div>
-          </CardContent>
-        </Card>
+        <AlertasRecientes />
+        <ProximosMantenimientos />
       </div>
     </MainLayout>
   );

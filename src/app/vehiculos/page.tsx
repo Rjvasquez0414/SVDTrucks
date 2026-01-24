@@ -1,8 +1,9 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { MainLayout } from '@/components/layout/MainLayout';
 import { VehiculoCard } from '@/components/vehiculos/VehiculoCard';
+import { VehiculoModal } from '@/components/vehiculos/VehiculoModal';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import {
@@ -14,7 +15,7 @@ import {
 } from '@/components/ui/select';
 import { getVehiculos } from '@/lib/queries/vehiculos';
 import { Plus, Search, LayoutGrid, List, Loader2 } from 'lucide-react';
-import { EstadoVehiculo, TipoVehiculo, VehiculoCompleto } from '@/types/database';
+import { EstadoVehiculo, VehiculoCompleto } from '@/types/database';
 import { formatNumber } from '@/lib/utils';
 import Link from 'next/link';
 
@@ -23,9 +24,12 @@ export default function VehiculosPage() {
   const [loading, setLoading] = useState(true);
   const [busqueda, setBusqueda] = useState('');
   const [filtroEstado, setFiltroEstado] = useState<EstadoVehiculo | 'todos'>('todos');
-  const [filtroTipo, setFiltroTipo] = useState<TipoVehiculo | 'todos'>('todos');
   const [filtroConductor, setFiltroConductor] = useState<string>('todos');
   const [vistaGrid, setVistaGrid] = useState(true);
+
+  // Estados para el modal
+  const [modalOpen, setModalOpen] = useState(false);
+  const [vehiculoEditar, setVehiculoEditar] = useState<VehiculoCompleto | null>(null);
 
   // Obtener lista única de conductores de los vehículos
   const conductoresUnicos = vehiculos
@@ -36,15 +40,37 @@ export default function VehiculosPage() {
     )
     .sort((a, b) => a.nombre.localeCompare(b.nombre));
 
+  const loadVehiculos = useCallback(async () => {
+    setLoading(true);
+    const data = await getVehiculos();
+    setVehiculos(data);
+    setLoading(false);
+  }, []);
+
   useEffect(() => {
-    async function loadVehiculos() {
+    // Cargar vehiculos al montar el componente
+    async function initVehiculos() {
       setLoading(true);
       const data = await getVehiculos();
       setVehiculos(data);
       setLoading(false);
     }
-    loadVehiculos();
+    initVehiculos();
   }, []);
+
+  const handleNuevoVehiculo = () => {
+    setVehiculoEditar(null);
+    setModalOpen(true);
+  };
+
+  const handleEditarVehiculo = (vehiculo: VehiculoCompleto) => {
+    setVehiculoEditar(vehiculo);
+    setModalOpen(true);
+  };
+
+  const handleModalSuccess = () => {
+    loadVehiculos();
+  };
 
   const vehiculosFiltrados = vehiculos.filter((v) => {
     const coincideBusqueda =
@@ -53,10 +79,9 @@ export default function VehiculosPage() {
       v.modelo.toLowerCase().includes(busqueda.toLowerCase());
 
     const coincideEstado = filtroEstado === 'todos' || v.estado === filtroEstado;
-    const coincideTipo = filtroTipo === 'todos' || v.tipo === filtroTipo;
     const coincideConductor = filtroConductor === 'todos' || v.conductores?.id === filtroConductor;
 
-    return coincideBusqueda && coincideEstado && coincideTipo && coincideConductor;
+    return coincideBusqueda && coincideEstado && coincideConductor;
   });
 
   return (
@@ -88,21 +113,6 @@ export default function VehiculosPage() {
               <SelectItem value="activo">Activo</SelectItem>
               <SelectItem value="en_mantenimiento">En Mantenimiento</SelectItem>
               <SelectItem value="inactivo">Inactivo</SelectItem>
-            </SelectContent>
-          </Select>
-
-          <Select
-            value={filtroTipo}
-            onValueChange={(value) => setFiltroTipo(value as TipoVehiculo | 'todos')}
-          >
-            <SelectTrigger className="w-40">
-              <SelectValue placeholder="Tipo" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="todos">Todos los tipos</SelectItem>
-              <SelectItem value="camion">Camion</SelectItem>
-              <SelectItem value="tractomula">Tractomula</SelectItem>
-              <SelectItem value="volqueta">Volqueta</SelectItem>
             </SelectContent>
           </Select>
 
@@ -143,12 +153,20 @@ export default function VehiculosPage() {
           </div>
 
           {/* Add button */}
-          <Button>
+          <Button onClick={handleNuevoVehiculo}>
             <Plus className="h-4 w-4 mr-2" />
             Nuevo Vehiculo
           </Button>
         </div>
       </div>
+
+      {/* Modal de vehiculo */}
+      <VehiculoModal
+        open={modalOpen}
+        onOpenChange={setModalOpen}
+        vehiculo={vehiculoEditar}
+        onSuccess={handleModalSuccess}
+      />
 
       {/* Results count */}
       <p className="mt-4 text-sm text-muted-foreground">
@@ -167,7 +185,11 @@ export default function VehiculosPage() {
       {!loading && vistaGrid && (
         <div className="mt-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
           {vehiculosFiltrados.map((vehiculo) => (
-            <VehiculoCard key={vehiculo.id} vehiculo={vehiculo} />
+            <VehiculoCard
+              key={vehiculo.id}
+              vehiculo={vehiculo}
+              onEditar={handleEditarVehiculo}
+            />
           ))}
         </div>
       )}

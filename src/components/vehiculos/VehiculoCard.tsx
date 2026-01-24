@@ -11,11 +11,12 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { VehiculoCompleto, EstadoVehiculo } from '@/types/database';
-import { cn, formatNumber } from '@/lib/utils';
+import { formatNumber } from '@/lib/utils';
 import Link from 'next/link';
 
 interface VehiculoCardProps {
   vehiculo: VehiculoCompleto;
+  onEditar?: (vehiculo: VehiculoCompleto) => void;
 }
 
 const estadoBadge: Record<EstadoVehiculo, { label: string; variant: 'default' | 'secondary' | 'destructive' | 'outline' }> = {
@@ -30,7 +31,7 @@ const tipoLabel: Record<string, string> = {
   volqueta: 'Volqueta',
 };
 
-export function VehiculoCard({ vehiculo }: VehiculoCardProps) {
+export function VehiculoCard({ vehiculo, onEditar }: VehiculoCardProps) {
   const estado = estadoBadge[vehiculo.estado];
 
   return (
@@ -72,8 +73,14 @@ export function VehiculoCard({ vehiculo }: VehiculoCardProps) {
                     Ver detalles
                   </Link>
                 </DropdownMenuItem>
-                <DropdownMenuItem>Editar</DropdownMenuItem>
-                <DropdownMenuItem>Registrar mantenimiento</DropdownMenuItem>
+                <DropdownMenuItem onClick={() => onEditar?.(vehiculo)}>
+                  Editar
+                </DropdownMenuItem>
+                <DropdownMenuItem asChild>
+                  <Link href={`/mantenimientos/nuevo?vehiculo=${vehiculo.id}`}>
+                    Registrar mantenimiento
+                  </Link>
+                </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
           </div>

@@ -32,7 +32,7 @@ import { formatNumber } from '@/lib/utils';
 import { supabase } from '@/lib/supabase';
 import Link from 'next/link';
 import Image from 'next/image';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { useAuth } from '@/lib/auth-context';
 import type { VehiculoCompleto, CategoriaMantenimiento, TipoMantenimiento } from '@/types/database';
 
@@ -44,10 +44,14 @@ interface Repuesto {
 
 export default function NuevoMantenimientoPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const { usuario } = useAuth();
 
+  // Obtener vehiculo de la URL si existe
+  const vehiculoIdFromUrl = searchParams.get('vehiculo');
+
   // Estados del formulario
-  const [vehiculoId, setVehiculoId] = useState('');
+  const [vehiculoId, setVehiculoId] = useState(vehiculoIdFromUrl || '');
   const [tipo, setTipo] = useState<TipoMantenimiento>('preventivo');
   const [categoria, setCategoria] = useState<CategoriaMantenimiento | ''>('');
   const [descripcion, setDescripcion] = useState('');

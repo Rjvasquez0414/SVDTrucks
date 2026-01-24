@@ -1,28 +1,40 @@
 'use client';
 
+import { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { AlertTriangle, Clock, FileWarning, Truck, ArrowRight } from 'lucide-react';
-import { getAlertasPendientes } from '@/data/alertas';
-import { getVehiculoById } from '@/data/vehiculos';
+import {
+  AlertTriangle,
+  Clock,
+  FileWarning,
+  Truck,
+  ArrowRight,
+  Loader2,
+  Gauge,
+  RefreshCw,
+} from 'lucide-react';
+import { getAlertasPendientes, type AlertaConVehiculo } from '@/lib/queries/alertas';
 import { cn } from '@/lib/utils';
 import Link from 'next/link';
-import { TipoAlerta, PrioridadAlerta } from '@/types';
+import type { TipoAlerta, PrioridadAlerta } from '@/types/database';
 
 const iconosPorTipo: Record<TipoAlerta, typeof AlertTriangle> = {
-  mantenimiento_kilometraje: Truck,
+  mantenimiento_kilometraje: Gauge,
   mantenimiento_tiempo: Clock,
-  vencimiento_soat: FileWarning,
-  vencimiento_tecnomecanica: FileWarning,
+  vencimiento_documento: FileWarning,
+  documento_vencido: FileWarning,
   vehiculo_inactivo: Truck,
+  kilometraje_alto: Gauge,
+  mantenimiento_pendiente: Clock,
+  actualizar_kilometraje: RefreshCw,
 };
 
 const coloresPorPrioridad: Record<PrioridadAlerta, string> = {
-  alta: 'border-l-red-500 bg-red-50',
-  media: 'border-l-yellow-500 bg-yellow-50',
-  baja: 'border-l-blue-500 bg-blue-50',
+  alta: 'border-l-red-500 bg-red-50 dark:bg-red-950/20',
+  media: 'border-l-yellow-500 bg-yellow-50 dark:bg-yellow-950/20',
+  baja: 'border-l-blue-500 bg-blue-50 dark:bg-blue-950/20',
 };
 
 const badgePorPrioridad: Record<PrioridadAlerta, 'destructive' | 'secondary' | 'outline'> = {
@@ -32,7 +44,39 @@ const badgePorPrioridad: Record<PrioridadAlerta, 'destructive' | 'secondary' | '
 };
 
 export function AlertasRecientes() {
-  const alertas = getAlertasPendientes().slice(0, 5);
+  const [alertas, setAlertas] = useState<AlertaConVehiculo[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    async function loadAlertas() {
+      setLoading(true);
+      try {
+        const data = await getAlertasPendientes();
+        setAlertas(data.slice(0, 5));
+      } catch (error) {
+        console.error('Error cargando alertas:', error);
+        setAlertas([]);
+      } finally {
+        setLoading(false);
+      }
+    }
+    loadAlertas();
+  }, []);
+
+  if (loading) {
+    return (
+      <Card className="h-full">
+        <CardHeader className="flex flex-row items-center justify-between pb-2">
+          <CardTitle className="text-base font-semibold">Alertas Recientes</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="flex items-center justify-center py-12">
+            <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+          </div>
+        </CardContent>
+      </Card>
+    );
+  }
 
   return (
     <Card className="h-full">
@@ -49,8 +93,7 @@ export function AlertasRecientes() {
         <ScrollArea className="h-[300px] pr-4">
           <div className="space-y-3">
             {alertas.map((alerta) => {
-              const vehiculo = getVehiculoById(alerta.vehiculoId);
-              const Icono = iconosPorTipo[alerta.tipo];
+              const Icono = iconosPorTipo[alerta.tipo] || AlertTriangle;
 
               return (
                 <div
@@ -68,13 +111,13 @@ export function AlertasRecientes() {
                       <p className="text-sm font-medium leading-tight">
                         {alerta.mensaje}
                       </p>
-                      <Badge variant={badgePorPrioridad[alerta.prioridad]} className="shrink-0 text-xs">
+                      <Badge variant={badgePorPrioridad[alerta.prioridad]} className="shrink-0 text-xs capitalize">
                         {alerta.prioridad}
                       </Badge>
                     </div>
-                    {vehiculo && (
+                    {alerta.vehiculos && (
                       <p className="text-xs text-muted-foreground">
-                        {vehiculo.marca} {vehiculo.modelo} - {vehiculo.placa}
+                        {alerta.vehiculos.marca} {alerta.vehiculos.modelo} - {alerta.vehiculos.placa}
                       </p>
                     )}
                   </div>

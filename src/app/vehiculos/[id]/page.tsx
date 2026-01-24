@@ -19,7 +19,6 @@ import {
 } from '@/components/ui/dialog';
 import {
   Truck,
-  Calendar,
   Gauge,
   FileText,
   Wrench,
@@ -40,6 +39,7 @@ import { supabase } from '@/lib/supabase';
 import { EstadoVehiculo, VehiculoCompleto } from '@/types/database';
 import { cn, formatNumber } from '@/lib/utils';
 import Link from 'next/link';
+import { VehiculoModal } from '@/components/vehiculos/VehiculoModal';
 
 interface PageProps {
   params: Promise<{ id: string }>;
@@ -58,6 +58,7 @@ export default function VehiculoDetallePage({ params }: PageProps) {
   const [kmDialogOpen, setKmDialogOpen] = useState(false);
   const [nuevoKilometraje, setNuevoKilometraje] = useState('');
   const [updatingKm, setUpdatingKm] = useState(false);
+  const [editModalOpen, setEditModalOpen] = useState(false);
 
   const loadVehiculo = useCallback(async () => {
     setLoading(true);
@@ -212,11 +213,11 @@ export default function VehiculoDetallePage({ params }: PageProps) {
           </div>
         </div>
         <div className="flex gap-2">
-          <Button variant="outline">
+          <Button variant="outline" onClick={() => setEditModalOpen(true)}>
             <Edit className="h-4 w-4 mr-2" />
             Editar
           </Button>
-          <Link href="/mantenimientos/nuevo">
+          <Link href={`/mantenimientos/nuevo?vehiculo=${vehiculo.id}`}>
             <Button>
               <Plus className="h-4 w-4 mr-2" />
               Nuevo Mantenimiento
@@ -224,6 +225,14 @@ export default function VehiculoDetallePage({ params }: PageProps) {
           </Link>
         </div>
       </div>
+
+      {/* Modal de edicion */}
+      <VehiculoModal
+        open={editModalOpen}
+        onOpenChange={setEditModalOpen}
+        vehiculo={vehiculo}
+        onSuccess={loadVehiculo}
+      />
 
       {/* Content tabs */}
       <Tabs defaultValue="general" className="mt-6">

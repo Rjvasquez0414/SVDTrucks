@@ -36,6 +36,8 @@ import {
   Calendar,
   Eye,
   Trash2,
+  Download,
+  ExternalLink,
 } from 'lucide-react';
 import { getVehiculos } from '@/lib/queries/vehiculos';
 import { getDocumentosCompletos, deleteDocumento } from '@/lib/queries/documentos';
@@ -89,7 +91,7 @@ function calcularEstadoDocumento(fechaVencimiento: string | null): EstadoDocumen
 // Componente para mostrar un documento
 function DocumentoCard({
   nombre,
-  tipo,
+  tipo: _tipo,
   fechaVencimiento,
   estado,
   documento,
@@ -668,25 +670,60 @@ export default function DocumentacionPage() {
         </DialogContent>
       </Dialog>
 
-      {/* Modal de previsualizacion de PDF */}
+      {/* Modal de previsualizacion de PDF mejorado */}
       <Dialog open={!!documentoPreview} onOpenChange={(open) => !open && setDocumentoPreview(null)}>
-        <DialogContent className="max-w-4xl h-[85vh]">
-          <DialogHeader>
+        <DialogContent className="max-w-5xl h-[90vh] flex flex-col">
+          <DialogHeader className="flex-shrink-0">
             <DialogTitle className="flex items-center gap-2">
               <FileText className="h-5 w-5" />
               {documentoPreview?.nombre}
             </DialogTitle>
-            <DialogDescription>
-              {documentoPreview?.archivo_nombre}
+            <DialogDescription className="flex items-center justify-between">
+              <span>{documentoPreview?.archivo_nombre}</span>
+              {documentoPreview?.archivo_url && (
+                <a
+                  href={documentoPreview.archivo_url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  download
+                  className="inline-flex items-center gap-1 text-xs text-primary hover:underline"
+                >
+                  <Download className="h-3 w-3" />
+                  Descargar PDF
+                </a>
+              )}
             </DialogDescription>
           </DialogHeader>
-          <div className="flex-1 min-h-0 -mx-6 -mb-6">
-            {documentoPreview?.archivo_url && (
-              <iframe
-                src={documentoPreview.archivo_url}
-                className="w-full h-full border-0 rounded-b-lg"
-                title={documentoPreview.nombre}
-              />
+          <div className="flex-1 min-h-0 mt-4 rounded-lg overflow-hidden border bg-muted">
+            {documentoPreview?.archivo_url ? (
+              <object
+                data={documentoPreview.archivo_url}
+                type="application/pdf"
+                className="w-full h-full"
+              >
+                <div className="flex flex-col items-center justify-center h-full py-12 text-center">
+                  <FileText className="h-16 w-16 text-muted-foreground/50 mb-4" />
+                  <p className="text-muted-foreground mb-4">
+                    No se puede mostrar el PDF en el navegador
+                  </p>
+                  <a
+                    href={documentoPreview.archivo_url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-2 px-4 py-2 bg-primary text-primary-foreground rounded-md hover:bg-primary/90 transition-colors"
+                  >
+                    <ExternalLink className="h-4 w-4" />
+                    Abrir en nueva pestaña
+                  </a>
+                </div>
+              </object>
+            ) : (
+              <div className="flex flex-col items-center justify-center h-full py-12 text-center">
+                <FileText className="h-16 w-16 text-muted-foreground/50 mb-4" />
+                <p className="text-muted-foreground">
+                  No hay archivo PDF disponible
+                </p>
+              </div>
             )}
           </div>
         </DialogContent>
