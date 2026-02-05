@@ -52,6 +52,7 @@ const documentosPorCategoria: Record<CategoriaDocumento, { tipo: TipoDocumento; 
     { tipo: 'soat', nombre: 'SOAT' },
     { tipo: 'poliza_rc_hidrocarburos', nombre: 'Poliza RC Hidrocarburos' },
     { tipo: 'revision_tecnomecanica', nombre: 'Revision Tecnomecanica' },
+    { tipo: 'impuestos', nombre: 'Impuestos' },
   ],
   tanque: [
     { tipo: 'prueba_hidrostatica', nombre: 'Prueba Hidrostatica' },
@@ -459,6 +460,11 @@ export default function DocumentacionPage() {
                 <div>
                   <p className="text-sm text-muted-foreground">Cabezote</p>
                   <p className="font-semibold">{vehiculoSeleccionado.placa}</p>
+                  {vehiculoSeleccionado.lugar_matricula && (
+                    <p className="text-xs text-muted-foreground">
+                      Matriculado en: {vehiculoSeleccionado.lugar_matricula}
+                    </p>
+                  )}
                 </div>
               </div>
 

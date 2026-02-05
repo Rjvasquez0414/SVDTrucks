@@ -63,6 +63,7 @@ export type TipoDocumento =
   | 'soat'
   | 'poliza_rc_hidrocarburos'
   | 'revision_tecnomecanica'
+  | 'impuestos'
   // Tanque
   | 'prueba_hidrostatica'
   | 'certificado_luz_negra'
@@ -217,6 +218,7 @@ export interface Database {
           notas: string | null;
           conductor_id: string | null;
           remolque_id: string | null;
+          lugar_matricula: string | null;
           created_at: string;
           updated_at: string;
         };
@@ -241,6 +243,7 @@ export interface Database {
           notas?: string | null;
           conductor_id?: string | null;
           remolque_id?: string | null;
+          lugar_matricula?: string | null;
           created_at?: string;
           updated_at?: string;
         };
@@ -264,6 +267,7 @@ export interface Database {
           notas?: string | null;
           conductor_id?: string | null;
           remolque_id?: string | null;
+          lugar_matricula?: string | null;
           updated_at?: string;
         };
       };

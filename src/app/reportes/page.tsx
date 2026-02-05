@@ -4,6 +4,9 @@ import { useState, useEffect, useMemo } from 'react';
 import { MainLayout } from '@/components/layout/MainLayout';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Button } from '@/components/ui/button';
+import { Checkbox } from '@/components/ui/checkbox';
+import { Label } from '@/components/ui/label';
 import {
   BarChart,
   Bar,
@@ -27,8 +30,41 @@ import {
 import { getVehiculos } from '@/lib/queries/vehiculos';
 import { getMantenimientos, type MantenimientoConVehiculo } from '@/lib/queries/mantenimientos';
 import { getCategoriaInfo } from '@/data/tipos-mantenimiento';
-import { DollarSign, Wrench, Truck, Loader2, Calendar } from 'lucide-react';
+import { DollarSign, Wrench, Truck, Loader2, Calendar, TrendingUp, Download, FileText, FileSpreadsheet, FileIcon } from 'lucide-react';
 import type { VehiculoCompleto } from '@/types/database';
+import { exportToPDF, exportToExcel, exportToWord, type ReportData } from '@/lib/export-utils';
+
+// Tipos de periodo
+type TipoPeriodo = 'anual' | 'semestral' | 'trimestral';
+
+interface PeriodoOption {
+  value: string;
+  label: string;
+  meses: number[];
+}
+
+// Generar opciones de periodo segun el tipo
+const getPeriodoOptions = (tipo: TipoPeriodo, año: number): PeriodoOption[] => {
+  switch (tipo) {
+    case 'trimestral':
+      return [
+        { value: 'Q1', label: `Q1 ${año} (Ene-Mar)`, meses: [0, 1, 2] },
+        { value: 'Q2', label: `Q2 ${año} (Abr-Jun)`, meses: [3, 4, 5] },
+        { value: 'Q3', label: `Q3 ${año} (Jul-Sep)`, meses: [6, 7, 8] },
+        { value: 'Q4', label: `Q4 ${año} (Oct-Dic)`, meses: [9, 10, 11] },
+      ];
+    case 'semestral':
+      return [
+        { value: 'S1', label: `S1 ${año} (Ene-Jun)`, meses: [0, 1, 2, 3, 4, 5] },
+        { value: 'S2', label: `S2 ${año} (Jul-Dic)`, meses: [6, 7, 8, 9, 10, 11] },
+      ];
+    case 'anual':
+    default:
+      return [
+        { value: 'anual', label: `Año ${año}`, meses: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11] },
+      ];
+  }
+};
 
 const COLORS = ['#3b82f6', '#22c55e', '#f97316', '#eab308', '#8b5cf6', '#ec4899'];
 
@@ -64,6 +100,28 @@ export default function ReportesPage() {
   const [vehiculos, setVehiculos] = useState<VehiculoCompleto[]>([]);
   const [loading, setLoading] = useState(true);
   const [añoSeleccionado, setAñoSeleccionado] = useState(new Date().getFullYear());
+  const [tipoPeriodo, setTipoPeriodo] = useState<TipoPeriodo>('anual');
+  const [periodoSeleccionado, setPeriodoSeleccionado] = useState('anual');
+  const [vehiculosComparar, setVehiculosComparar] = useState<string[]>([]);
+  const [exporting, setExporting] = useState<'pdf' | 'excel' | 'word' | null>(null);
+
+  // Obtener opciones de periodo segun el tipo seleccionado
+  const periodoOptions = useMemo(() =>
+    getPeriodoOptions(tipoPeriodo, añoSeleccionado),
+    [tipoPeriodo, añoSeleccionado]
+  );
+
+  // Obtener meses del periodo seleccionado
+  const mesesPeriodo = useMemo(() => {
+    const periodo = periodoOptions.find(p => p.value === periodoSeleccionado);
+    return periodo?.meses || [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11];
+  }, [periodoOptions, periodoSeleccionado]);
+
+  // Resetear periodo cuando cambia el tipo
+  useEffect(() => {
+    const defaultPeriodo = tipoPeriodo === 'anual' ? 'anual' : tipoPeriodo === 'semestral' ? 'S1' : 'Q1';
+    setPeriodoSeleccionado(defaultPeriodo);
+  }, [tipoPeriodo]);
 
   // Calcular costos por mes usando useMemo (se recalcula cuando cambian mantenimientos o año)
   const costosPorMes = useMemo(() => {
@@ -95,11 +153,16 @@ export default function ReportesPage() {
     loadData();
   }, []);
 
-  // Filtrar mantenimientos del año seleccionado para estadísticas
-  const mantenimientosAño = mantenimientos.filter(m => {
-    const fecha = new Date(m.fecha);
-    return fecha.getFullYear() === añoSeleccionado;
-  });
+  // Filtrar mantenimientos del periodo seleccionado
+  const mantenimientosPeriodo = useMemo(() => {
+    return mantenimientos.filter(m => {
+      const fecha = new Date(m.fecha);
+      return fecha.getFullYear() === añoSeleccionado && mesesPeriodo.includes(fecha.getMonth());
+    });
+  }, [mantenimientos, añoSeleccionado, mesesPeriodo]);
+
+  // Alias para compatibilidad (renombrado de mantenimientosAño a mantenimientosPeriodo)
+  const mantenimientosAño = mantenimientosPeriodo;
 
   // Calcular estadísticas del año seleccionado
   const costoTotalGeneral = mantenimientosAño.reduce((sum, m) => sum + (m.costo || 0), 0);
@@ -140,6 +203,54 @@ export default function ReportesPage() {
     .sort((a, b) => b.value - a.value)
     .slice(0, 6);
 
+  // Obtener etiqueta del periodo actual
+  const getPeriodoLabel = () => {
+    if (tipoPeriodo === 'anual') return `Año ${añoSeleccionado}`;
+    const option = periodoOptions.find(p => p.value === periodoSeleccionado);
+    return option?.label || `${añoSeleccionado}`;
+  };
+
+  // Preparar datos para exportacion
+  const prepareExportData = (): ReportData => ({
+    titulo: 'Reporte de Mantenimientos',
+    periodo: getPeriodoLabel(),
+    fechaGeneracion: new Date().toLocaleDateString('es-CO', {
+      year: 'numeric',
+      month: 'long',
+      day: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+    }),
+    vehiculos: costosPorVehiculo,
+    costoTotal: costoTotalGeneral,
+    totalMantenimientos,
+    costosPorMes,
+    promedioMensual,
+  });
+
+  // Funciones de exportacion
+  const handleExport = async (format: 'pdf' | 'excel' | 'word') => {
+    setExporting(format);
+    try {
+      const data = prepareExportData();
+      switch (format) {
+        case 'pdf':
+          await exportToPDF(data);
+          break;
+        case 'excel':
+          await exportToExcel(data);
+          break;
+        case 'word':
+          await exportToWord(data);
+          break;
+      }
+    } catch (error) {
+      console.error('Error al exportar:', error);
+    } finally {
+      setExporting(null);
+    }
+  };
+
   if (loading) {
     return (
       <MainLayout title="Reportes y Analisis">
@@ -152,27 +263,111 @@ export default function ReportesPage() {
 
   return (
     <MainLayout title="Reportes y Analisis">
-      {/* Selector de año */}
-      <div className="flex items-center justify-between mb-6">
+      {/* Selectores de periodo */}
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between mb-6">
         <div className="flex items-center gap-2 text-muted-foreground">
           <Calendar className="h-4 w-4" />
-          <span className="text-sm">Mostrando datos de:</span>
+          <span className="text-sm">Filtrar por periodo:</span>
         </div>
-        <Select
-          value={añoSeleccionado.toString()}
-          onValueChange={(value) => setAñoSeleccionado(parseInt(value))}
+        <div className="flex flex-wrap items-center gap-3">
+          {/* Tipo de periodo */}
+          <Select
+            value={tipoPeriodo}
+            onValueChange={(value) => setTipoPeriodo(value as TipoPeriodo)}
+          >
+            <SelectTrigger className="w-32">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="trimestral">Trimestral</SelectItem>
+              <SelectItem value="semestral">Semestral</SelectItem>
+              <SelectItem value="anual">Anual</SelectItem>
+            </SelectContent>
+          </Select>
+
+          {/* Año */}
+          <Select
+            value={añoSeleccionado.toString()}
+            onValueChange={(value) => setAñoSeleccionado(parseInt(value))}
+          >
+            <SelectTrigger className="w-24">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {añosDisponibles.map((año) => (
+                <SelectItem key={año} value={año.toString()}>
+                  {año}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+
+          {/* Periodo especifico (solo si no es anual) */}
+          {tipoPeriodo !== 'anual' && (
+            <Select
+              value={periodoSeleccionado}
+              onValueChange={setPeriodoSeleccionado}
+            >
+              <SelectTrigger className="w-44">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {periodoOptions.map((option) => (
+                  <SelectItem key={option.value} value={option.value}>
+                    {option.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          )}
+        </div>
+      </div>
+
+      {/* Botones de exportacion */}
+      <div className="flex flex-wrap items-center gap-2 mb-6">
+        <span className="text-sm text-muted-foreground mr-2">
+          <Download className="h-4 w-4 inline mr-1" />
+          Exportar:
+        </span>
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() => handleExport('pdf')}
+          disabled={exporting !== null}
         >
-          <SelectTrigger className="w-32">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            {añosDisponibles.map((año) => (
-              <SelectItem key={año} value={año.toString()}>
-                {año}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
+          {exporting === 'pdf' ? (
+            <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+          ) : (
+            <FileText className="h-4 w-4 mr-2 text-red-500" />
+          )}
+          PDF
+        </Button>
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() => handleExport('excel')}
+          disabled={exporting !== null}
+        >
+          {exporting === 'excel' ? (
+            <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+          ) : (
+            <FileSpreadsheet className="h-4 w-4 mr-2 text-green-600" />
+          )}
+          Excel
+        </Button>
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() => handleExport('word')}
+          disabled={exporting !== null}
+        >
+          {exporting === 'word' ? (
+            <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+          ) : (
+            <FileIcon className="h-4 w-4 mr-2 text-blue-600" />
+          )}
+          Word
+        </Button>
       </div>
 
       {/* Summary Cards */}
@@ -242,6 +437,10 @@ export default function ReportesPage() {
           <TabsTrigger value="costos">Costos por Mes</TabsTrigger>
           <TabsTrigger value="vehiculos">Por Vehiculo</TabsTrigger>
           <TabsTrigger value="distribucion">Distribucion</TabsTrigger>
+          <TabsTrigger value="comparacion" className="flex items-center gap-1">
+            <TrendingUp className="h-4 w-4" />
+            Comparar
+          </TabsTrigger>
         </TabsList>
 
         <TabsContent value="costos" className="mt-4">
@@ -410,6 +609,178 @@ export default function ReportesPage() {
               </CardContent>
             </Card>
           </div>
+        </TabsContent>
+
+        {/* Tab de comparacion de vehiculos */}
+        <TabsContent value="comparacion" className="mt-4">
+          <div className="grid gap-6 lg:grid-cols-3">
+            {/* Selector de vehiculos */}
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-base">Seleccionar Vehiculos</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <p className="text-sm text-muted-foreground mb-4">
+                  Selecciona los vehiculos que deseas comparar
+                </p>
+                <div className="space-y-3 max-h-[300px] overflow-y-auto">
+                  {vehiculos.map((v) => (
+                    <div key={v.id} className="flex items-center gap-3">
+                      <Checkbox
+                        id={`compare-${v.id}`}
+                        checked={vehiculosComparar.includes(v.id)}
+                        onCheckedChange={(checked) => {
+                          if (checked) {
+                            setVehiculosComparar([...vehiculosComparar, v.id]);
+                          } else {
+                            setVehiculosComparar(vehiculosComparar.filter(id => id !== v.id));
+                          }
+                        }}
+                      />
+                      <Label
+                        htmlFor={`compare-${v.id}`}
+                        className="flex-1 cursor-pointer"
+                      >
+                        <span className="font-medium">{v.placa}</span>
+                        <span className="text-sm text-muted-foreground ml-2">
+                          {v.marca} {v.modelo}
+                        </span>
+                      </Label>
+                    </div>
+                  ))}
+                </div>
+                {vehiculosComparar.length > 0 && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="mt-4 w-full"
+                    onClick={() => setVehiculosComparar([])}
+                  >
+                    Limpiar seleccion
+                  </Button>
+                )}
+              </CardContent>
+            </Card>
+
+            {/* Grafico comparativo */}
+            <Card className="lg:col-span-2">
+              <CardHeader>
+                <CardTitle className="text-base">
+                  Comparacion de Costos
+                  {vehiculosComparar.length > 0 && ` (${vehiculosComparar.length} vehiculos)`}
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                {vehiculosComparar.length === 0 ? (
+                  <div className="flex flex-col items-center justify-center h-[300px] text-muted-foreground">
+                    <TrendingUp className="h-12 w-12 mb-4 opacity-50" />
+                    <p>Selecciona al menos un vehiculo para comparar</p>
+                  </div>
+                ) : (
+                  <div className="h-[300px]">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <BarChart
+                        data={vehiculosComparar.map(id => {
+                          const vehiculo = vehiculos.find(v => v.id === id);
+                          const costoTotal = mantenimientosPeriodo
+                            .filter(m => m.vehiculo_id === id)
+                            .reduce((sum, m) => sum + (m.costo || 0), 0);
+                          const preventivo = mantenimientosPeriodo
+                            .filter(m => m.vehiculo_id === id && m.tipo === 'preventivo')
+                            .reduce((sum, m) => sum + (m.costo || 0), 0);
+                          const correctivo = mantenimientosPeriodo
+                            .filter(m => m.vehiculo_id === id && m.tipo === 'correctivo')
+                            .reduce((sum, m) => sum + (m.costo || 0), 0);
+                          return {
+                            placa: vehiculo?.placa || id,
+                            total: costoTotal,
+                            preventivo,
+                            correctivo,
+                          };
+                        })}
+                      >
+                        <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
+                        <XAxis dataKey="placa" className="text-xs" />
+                        <YAxis tickFormatter={formatearPesos} className="text-xs" />
+                        <Tooltip
+                          formatter={(value: number) => formatearPesosCompleto(value)}
+                          contentStyle={{
+                            backgroundColor: '#fff',
+                            border: '1px solid #e5e7eb',
+                            borderRadius: '8px',
+                          }}
+                        />
+                        <Legend />
+                        <Bar dataKey="preventivo" name="Preventivo" fill="#3b82f6" radius={[4, 4, 0, 0]} />
+                        <Bar dataKey="correctivo" name="Correctivo" fill="#f97316" radius={[4, 4, 0, 0]} />
+                      </BarChart>
+                    </ResponsiveContainer>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          </div>
+
+          {/* Tabla comparativa */}
+          {vehiculosComparar.length > 0 && (
+            <Card className="mt-6">
+              <CardHeader>
+                <CardTitle className="text-base">Detalle Comparativo</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="border-b">
+                        <th className="text-left py-3 px-2 font-medium">Vehiculo</th>
+                        <th className="text-right py-3 px-2 font-medium">Preventivo</th>
+                        <th className="text-right py-3 px-2 font-medium">Correctivo</th>
+                        <th className="text-right py-3 px-2 font-medium">Total</th>
+                        <th className="text-right py-3 px-2 font-medium"># Mant.</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {vehiculosComparar.map(id => {
+                        const vehiculo = vehiculos.find(v => v.id === id);
+                        const mantsVehiculo = mantenimientosPeriodo.filter(m => m.vehiculo_id === id);
+                        const preventivo = mantsVehiculo
+                          .filter(m => m.tipo === 'preventivo')
+                          .reduce((sum, m) => sum + (m.costo || 0), 0);
+                        const correctivo = mantsVehiculo
+                          .filter(m => m.tipo === 'correctivo')
+                          .reduce((sum, m) => sum + (m.costo || 0), 0);
+                        const total = preventivo + correctivo;
+                        return (
+                          <tr key={id} className="border-b last:border-0 hover:bg-muted/50">
+                            <td className="py-3 px-2">
+                              <div>
+                                <span className="font-medium">{vehiculo?.placa}</span>
+                                <p className="text-xs text-muted-foreground">
+                                  {vehiculo?.marca} {vehiculo?.modelo}
+                                </p>
+                              </div>
+                            </td>
+                            <td className="text-right py-3 px-2 text-blue-600">
+                              {formatearPesosCompleto(preventivo)}
+                            </td>
+                            <td className="text-right py-3 px-2 text-orange-600">
+                              {formatearPesosCompleto(correctivo)}
+                            </td>
+                            <td className="text-right py-3 px-2 font-medium">
+                              {formatearPesosCompleto(total)}
+                            </td>
+                            <td className="text-right py-3 px-2">
+                              {mantsVehiculo.length}
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              </CardContent>
+            </Card>
+          )}
         </TabsContent>
       </Tabs>
 

@@ -83,12 +83,12 @@ export default function NuevoMantenimientoPage() {
   const categoriasFiltradas = catalogoMantenimiento.filter((c) => c.tipo === tipo);
   const categoriaInfo = categoria ? getCategoriaInfo(categoria) : null;
 
-  // Auto-rellenar descripcion cuando se selecciona categoria
+  // Auto-rellenar descripcion cuando se selecciona categoria (excepto "otro")
   useEffect(() => {
-    if (categoriaInfo && !descripcion) {
+    if (categoriaInfo && !descripcion && categoria !== 'otro') {
       setDescripcion(categoriaInfo.descripcion);
     }
-  }, [categoriaInfo, descripcion]);
+  }, [categoriaInfo, descripcion, categoria]);
 
   // Auto-rellenar kilometraje con el actual del vehiculo
   useEffect(() => {
@@ -390,8 +390,8 @@ export default function NuevoMantenimientoPage() {
                   </div>
                 </div>
 
-                {/* Info de la categoria seleccionada */}
-                {categoriaInfo && (
+                {/* Info de la categoria seleccionada (excepto "otro") */}
+                {categoriaInfo && categoria !== 'otro' && (
                   <div className="rounded-lg border bg-muted/50 p-4 space-y-2">
                     <div className="flex items-center gap-2 text-sm font-medium">
                       <Info className="h-4 w-4" />
@@ -413,6 +413,19 @@ export default function NuevoMantenimientoPage() {
                         Aplica a: {categoriaInfo.aplicaA === 'ambos' ? 'Cabezote y Trailer' : categoriaInfo.aplicaA}
                       </Badge>
                     </div>
+                  </div>
+                )}
+
+                {/* Campo especial para categoria "Otro" */}
+                {categoria === 'otro' && (
+                  <div className="rounded-lg border border-orange-200 bg-orange-50 p-4 space-y-3">
+                    <div className="flex items-center gap-2 text-sm font-medium text-orange-700">
+                      <Info className="h-4 w-4" />
+                      Mantenimiento Personalizado
+                    </div>
+                    <p className="text-sm text-orange-600">
+                      Especifica el tipo de mantenimiento que deseas registrar.
+                    </p>
                   </div>
                 )}
 
@@ -445,14 +458,25 @@ export default function NuevoMantenimientoPage() {
                 </div>
 
                 <div className="space-y-2">
-                  <Label htmlFor="descripcion">Descripcion *</Label>
+                  <Label htmlFor="descripcion">
+                    {categoria === 'otro' ? 'Tipo de Mantenimiento *' : 'Descripcion *'}
+                  </Label>
                   <Input
                     id="descripcion"
-                    placeholder="Descripcion del trabajo realizado"
+                    placeholder={
+                      categoria === 'otro'
+                        ? 'Ej: Cambio de bateria, Reparacion de luces, etc.'
+                        : 'Descripcion del trabajo realizado'
+                    }
                     value={descripcion}
                     onChange={(e) => setDescripcion(e.target.value)}
                     required
                   />
+                  {categoria === 'otro' && (
+                    <p className="text-xs text-muted-foreground">
+                      Describe claramente que tipo de mantenimiento se realizo
+                    </p>
+                  )}
                 </div>
 
                 <div className="space-y-2">

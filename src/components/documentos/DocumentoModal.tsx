@@ -29,6 +29,7 @@ const catalogoDocumentos: Record<CategoriaDocumento, { tipo: TipoDocumento; nomb
     { tipo: 'soat', nombre: 'SOAT' },
     { tipo: 'poliza_rc_hidrocarburos', nombre: 'Poliza RC Hidrocarburos' },
     { tipo: 'revision_tecnomecanica', nombre: 'Revision Tecnomecanica' },
+    { tipo: 'impuestos', nombre: 'Impuestos' },
   ],
   tanque: [
     { tipo: 'prueba_hidrostatica', nombre: 'Prueba Hidrostatica' },
@@ -97,11 +98,22 @@ export function DocumentoModal({
     onOpenChange(false);
   };
 
+  // Tipos de archivo permitidos
+  const TIPOS_PERMITIDOS = [
+    'application/pdf',
+    'image/jpeg',
+    'image/png',
+    'image/webp',
+    'image/gif',
+    'application/vnd.ms-excel',
+    'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+  ];
+
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
-      if (file.type !== 'application/pdf') {
-        setError('Solo se permiten archivos PDF');
+      if (!TIPOS_PERMITIDOS.includes(file.type)) {
+        setError('Formato no permitido. Use PDF, imagenes (JPG, PNG, WEBP) o Excel (XLS, XLSX)');
         return;
       }
       if (file.size > 10 * 1024 * 1024) { // 10MB max
@@ -283,9 +295,9 @@ export function DocumentoModal({
             </p>
           </div>
 
-          {/* Upload de archivo PDF */}
+          {/* Upload de archivo */}
           <div className="space-y-2">
-            <Label>Documento PDF (opcional)</Label>
+            <Label>Documento (opcional)</Label>
             {!archivo ? (
               <div
                 className="border-2 border-dashed rounded-lg p-6 text-center cursor-pointer hover:border-primary/50 hover:bg-muted/50 transition-colors"
@@ -293,15 +305,15 @@ export function DocumentoModal({
               >
                 <Upload className="h-8 w-8 mx-auto text-muted-foreground mb-2" />
                 <p className="text-sm text-muted-foreground">
-                  Haz clic para seleccionar un archivo PDF
+                  Haz clic para seleccionar un archivo
                 </p>
                 <p className="text-xs text-muted-foreground mt-1">
-                  Maximo 10MB
+                  PDF, Imagenes (JPG, PNG) o Excel - Maximo 10MB
                 </p>
               </div>
             ) : (
               <div className="flex items-center gap-3 p-3 border rounded-lg bg-muted/30">
-                <File className="h-8 w-8 text-red-500 shrink-0" />
+                <File className="h-8 w-8 text-blue-500 shrink-0" />
                 <div className="flex-1 min-w-0">
                   <p className="text-sm font-medium truncate">{archivo.name}</p>
                   <p className="text-xs text-muted-foreground">
@@ -321,7 +333,7 @@ export function DocumentoModal({
             <input
               ref={fileInputRef}
               type="file"
-              accept="application/pdf"
+              accept="application/pdf,image/jpeg,image/png,image/webp,image/gif,.xls,.xlsx"
               onChange={handleFileChange}
               className="hidden"
             />
