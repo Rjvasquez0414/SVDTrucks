@@ -356,7 +356,7 @@ export default function NuevoMantenimientoPage() {
                       <SelectTrigger id="categoria">
                         <SelectValue placeholder="Seleccionar categoria" />
                       </SelectTrigger>
-                      <SelectContent>
+                      <SelectContent className="max-h-[300px] overflow-y-auto">
                         {categoriasFiltradas.map((c) => (
                           <SelectItem key={c.categoria} value={c.categoria}>
                             <div className="flex items-center gap-2">

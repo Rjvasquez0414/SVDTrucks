@@ -230,6 +230,14 @@ export const catalogoMantenimiento: CatalogoMantenimiento[] = [
     tipo: 'correctivo',
     aplicaA: 'ambos',
   },
+  // Duplicado de "otro" para mantenimientos preventivos
+  {
+    categoria: 'otro',
+    nombre: 'Otro',
+    descripcion: 'Otros tipos de mantenimiento preventivo',
+    tipo: 'preventivo',
+    aplicaA: 'ambos',
+  },
 ];
 
 export function getCategoriaInfo(categoria: CategoriaMantenimiento): CatalogoMantenimiento | undefined {
