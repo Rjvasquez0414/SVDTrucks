@@ -282,23 +282,40 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (retryTimeout) clearTimeout(retryTimeout);
       subscription.unsubscribe();
     };
-  }, [fetchUserProfile, retryCount]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [fetchUserProfile]); // Removido retryCount para evitar re-montar el listener
 
-  // Refrescar sesion cuando la ventana vuelve a ser visible (solo si no hay usuario)
+  // Refrescar sesion cuando la ventana vuelve a ser visible
+  // IMPORTANTE: Siempre verificar, no solo cuando no hay usuario
   useEffect(() => {
     const handleVisibilityChange = async () => {
-      if (document.visibilityState === 'visible' && !usuario) {
-        console.log('[Auth] Ventana visible sin usuario - verificando sesion...');
+      if (document.visibilityState === 'visible') {
+        console.log('[Auth] Ventana visible - verificando sesion...');
         try {
-          const { data: { session } } = await supabase.auth.getSession();
+          const { data: { session }, error } = await supabase.auth.getSession();
+
+          if (error) {
+            console.error('[Auth] Error obteniendo sesion:', error);
+            setConnectionStatus('error');
+            return;
+          }
+
           if (session?.user) {
+            // Verificar que el usuario aun existe y actualizar conexion
             const profile = await fetchUserProfile(session.user);
             if (profile) {
               setUsuario(profile);
+              setConnectionStatus('connected');
             }
+          } else if (usuario) {
+            // Habia usuario pero ya no hay sesion - cerrar sesion local
+            console.log('[Auth] Sesion expirada - limpiando estado local');
+            setUsuario(null);
+            setConnectionStatus('idle');
           }
         } catch (err) {
           console.error('[Auth] Error verificando sesion:', err);
+          setConnectionStatus('error');
         }
       }
     };

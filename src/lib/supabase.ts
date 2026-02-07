@@ -11,6 +11,30 @@ if (!supabaseUrl || !supabaseAnonKey) {
   });
 }
 
+// Timeout para peticiones HTTP (15 segundos)
+const FETCH_TIMEOUT_MS = 15_000;
+
+// Fetch con timeout para evitar peticiones colgadas
+const fetchWithTimeout: typeof fetch = async (url, options = {}) => {
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
+
+  try {
+    const response = await fetch(url, {
+      ...options,
+      signal: controller.signal,
+    });
+    return response;
+  } catch (error) {
+    if (error instanceof Error && error.name === 'AbortError') {
+      throw new Error(`Request timeout after ${FETCH_TIMEOUT_MS}ms`);
+    }
+    throw error;
+  } finally {
+    clearTimeout(timeoutId);
+  }
+};
+
 export const supabase = createClient<Database>(
   supabaseUrl || '',
   supabaseAnonKey || '',
@@ -24,6 +48,7 @@ export const supabase = createClient<Database>(
       headers: {
         'x-my-custom-header': 'svd-trucks',
       },
+      fetch: fetchWithTimeout,
     },
     // Configuracion de realtime para mejor manejo de conexion
     realtime: {

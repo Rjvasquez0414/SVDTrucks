@@ -1,12 +1,13 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { MainLayout } from '@/components/layout/MainLayout';
 import { StatCard } from '@/components/dashboard/StatCard';
 import { FlotaResumen } from '@/components/dashboard/FlotaResumen';
 import { AlertasRecientes } from '@/components/dashboard/AlertasRecientes';
 import { ProximosMantenimientos } from '@/components/dashboard/ProximosMantenimientos';
 import { getEstadisticasFlota, getVehiculos } from '@/lib/queries/vehiculos';
+import { useRefetchOnFocus } from '@/hooks/useRefetchOnFocus';
 import { Truck, AlertTriangle, Wrench, DollarSign, Loader2 } from 'lucide-react';
 import { VehiculoCompleto } from '@/types/database';
 
@@ -20,19 +21,28 @@ export default function DashboardPage() {
     inactivos: 0,
   });
 
-  useEffect(() => {
-    async function loadData() {
-      setLoading(true);
+  const loadData = useCallback(async () => {
+    try {
       const [stats, vehiculosData] = await Promise.all([
         getEstadisticasFlota(),
         getVehiculos(),
       ]);
       setEstadisticas(stats);
       setVehiculos(vehiculosData);
+    } catch (err) {
+      console.error('[Dashboard] Error cargando datos:', err);
+    } finally {
       setLoading(false);
     }
-    loadData();
   }, []);
+
+  // Cargar datos al inicio
+  useEffect(() => {
+    loadData();
+  }, [loadData]);
+
+  // Recargar datos cuando el usuario vuelve a la pestaña (si estuvo inactiva >1 min)
+  useRefetchOnFocus(loadData, 60_000);
 
   if (loading) {
     return (
