@@ -11,12 +11,22 @@ if (!supabaseUrl || !supabaseAnonKey) {
   });
 }
 
-// Desactivar navigator.locks que causa deadlocks en el SDK de Supabase Auth.
-// El SDK usa navigator.locks.request() para coordinar operaciones de auth,
-// pero el lock se queda atascado al cambiar de pestaña, causando que
-// getUser(), signInWithPassword(), onAuthStateChange(INITIAL_SESSION), etc.
-// se cuelguen para siempre. Al pasar un lock no-op, las funciones se
-// ejecutan directamente sin esperar.
+// --- SOLUCION AL CUELGUE AL CAMBIAR DE PESTAÑA ---
+//
+// CAUSA RAIZ: El SDK de Supabase Auth tiene un handler de visibilitychange que:
+//   1. Adquiere un lock con timeout INFINITO (-1)
+//   2. Llama _recoverAndRefresh() que hace un fetch de red
+//   3. Si la conexion TCP esta muerta (comun despues de cambiar de pestaña),
+//      el fetch se cuelga y el lock NUNCA se libera
+//   4. Todas las operaciones de auth (getSession, getUser, etc.) se encolan
+//      esperando el lock -> DEADLOCK
+//
+// SOLUCION (3 partes):
+//   1. noopLock: evita deadlock de navigator.locks (que tambien se cuelga)
+//   2. fetchWithRetry: timeout de 5s + reintento para manejar conexiones muertas
+//   3. Desactivar el visibilitychange handler del SDK y reemplazarlo con
+//      startAutoRefresh/stopAutoRefresh que son NON-BLOCKING (usan timeout=0)
+
 const noopLock = async <R>(
   _name: string,
   _acquireTimeout: number,
@@ -25,42 +35,14 @@ const noopLock = async <R>(
   return fn();
 };
 
-// --- Fetch resiliente para manejar conexiones TCP muertas al cambiar de pestaña ---
-//
-// Problema: cuando el navegador suspende una pestaña, las conexiones HTTP/2 a
-// Supabase mueren silenciosamente. Al reactivar la pestaña, las peticiones HTTP
-// intentan usar la conexion muerta y se cuelgan indefinidamente.
-//
-// Solucion:
-// 1. Timeout corto (5s) para detectar conexiones muertas rapidamente
-// 2. Reintento automatico (1 vez) - el primer timeout fuerza al navegador a
-//    detectar la conexion muerta; el reintento usa una conexion fresca
-// 3. Al cambiar de pestaña, abortar todas las peticiones pendientes en
-//    conexiones stale para que no bloqueen las nuevas
+// Fetch con timeout y reintento para manejar conexiones TCP muertas
 const FETCH_TIMEOUT_MS = 5_000;
 const MAX_RETRIES = 1;
 const RETRY_DELAY_MS = 500;
 
-// Abortar peticiones pendientes cuando la pestaña vuelve a ser visible
-// (las conexiones de cuando estaba en segundo plano estan muertas)
-let staleAbort = new AbortController();
-
-if (typeof document !== 'undefined') {
-  document.addEventListener('visibilitychange', () => {
-    if (document.visibilityState === 'visible') {
-      staleAbort.abort();
-      staleAbort = new AbortController();
-    }
-  });
-}
-
 function singleFetch(input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
   const controller = new AbortController();
 
-  // Abortar si las conexiones stale son invalidadas (visibility change)
-  staleAbort.signal.addEventListener('abort', () => controller.abort(), { once: true });
-
-  // Si el caller ya tiene un signal, propagar su abort
   const callerSignal = init?.signal;
   if (callerSignal) {
     if (callerSignal.aborted) {
@@ -81,7 +63,6 @@ const fetchWithRetry: typeof fetch = async (input, init) => {
   const callerSignal = init?.signal;
 
   for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
-    // No reintentar si el caller aborto
     if (callerSignal?.aborted) {
       throw new DOMException('The operation was aborted.', 'AbortError');
     }
@@ -89,13 +70,9 @@ const fetchWithRetry: typeof fetch = async (input, init) => {
     try {
       return await singleFetch(input, init);
     } catch (err) {
-      // Si el caller aborto, no reintentar
       if (callerSignal?.aborted) throw err;
-
-      // Si es el ultimo intento, lanzar el error
       if (attempt >= MAX_RETRIES) throw err;
 
-      // Esperar antes de reintentar (da tiempo al navegador para abrir conexion fresca)
       await new Promise(resolve => setTimeout(resolve, RETRY_DELAY_MS));
     }
   }
@@ -121,6 +98,33 @@ export const supabase = createClient<Database>(
     },
   }
 );
+
+// --- PARTE 3: Desactivar el visibilitychange handler del SDK ---
+// El SDK registra un listener que llama _recoverAndRefresh() con lock
+// de timeout infinito. Lo reemplazamos con startAutoRefresh/stopAutoRefresh
+// que usan _acquireLock(0, ...) - si el lock esta ocupado, se saltan sin bloquear.
+if (typeof window !== 'undefined') {
+  // Esperar a que el SDK termine de inicializarse (siguiente tick)
+  setTimeout(() => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const authClient = supabase.auth as any;
+
+    // Remover el handler del SDK que causa el deadlock
+    if (authClient.visibilityChangedCallback) {
+      window.removeEventListener('visibilitychange', authClient.visibilityChangedCallback);
+      authClient.visibilityChangedCallback = null;
+    }
+
+    // Nuestro handler: solo maneja start/stop del auto-refresh ticker (non-blocking)
+    window.addEventListener('visibilitychange', () => {
+      if (document.visibilityState === 'visible') {
+        supabase.auth.startAutoRefresh();
+      } else {
+        supabase.auth.stopAutoRefresh();
+      }
+    });
+  }, 0);
+}
 
 // Cliente para uso en servidor (Server Components, API Routes)
 export function createServerClient() {
@@ -150,40 +154,4 @@ export async function checkConnection(): Promise<{ connected: boolean; latency?:
       error: err instanceof Error ? err.message : 'Error de conexion desconocido',
     };
   }
-}
-
-// Utilidad para ejecutar query con reintentos
-export async function queryWithRetry<T>(
-  queryFn: () => Promise<{ data: T | null; error: { message: string } | null }>,
-  maxRetries = 3,
-  delayMs = 1000
-): Promise<{ data: T | null; error: string | null }> {
-  let lastError: string | null = null;
-
-  for (let attempt = 1; attempt <= maxRetries; attempt++) {
-    try {
-      const { data, error } = await queryFn();
-
-      if (!error) {
-        return { data, error: null };
-      }
-
-      lastError = error.message;
-
-      // Si es el ultimo intento, no esperar
-      if (attempt < maxRetries) {
-        console.log(`[Supabase] Query fallida, reintentando (${attempt}/${maxRetries})...`);
-        await new Promise(resolve => setTimeout(resolve, delayMs * attempt));
-      }
-    } catch (err) {
-      lastError = err instanceof Error ? err.message : 'Error desconocido';
-
-      if (attempt < maxRetries) {
-        console.log(`[Supabase] Error de red, reintentando (${attempt}/${maxRetries})...`);
-        await new Promise(resolve => setTimeout(resolve, delayMs * attempt));
-      }
-    }
-  }
-
-  return { data: null, error: lastError };
 }
