@@ -11,43 +11,10 @@ if (!supabaseUrl || !supabaseAnonKey) {
   });
 }
 
-// Timeout para peticiones HTTP (15 segundos)
-const FETCH_TIMEOUT_MS = 15_000;
-
-// Fetch con timeout - version simplificada y robusta
-const fetchWithTimeout: typeof fetch = (url, options = {}) => {
-  const controller = new AbortController();
-  const timeoutId = setTimeout(() => {
-    console.warn(`[Fetch] Timeout ${FETCH_TIMEOUT_MS}ms para:`, typeof url === 'string' ? url.split('?')[0] : 'request');
-    controller.abort();
-  }, FETCH_TIMEOUT_MS);
-
-  // Combinar signals: la nuestra (timeout) + la original de Supabase si existe
-  const originalSignal = options.signal as AbortSignal | undefined;
-  if (originalSignal?.aborted) {
-    clearTimeout(timeoutId);
-    return Promise.reject(new DOMException('Aborted', 'AbortError'));
-  }
-  if (originalSignal) {
-    originalSignal.addEventListener('abort', () => controller.abort(), { once: true });
-  }
-
-  return fetch(url, {
-    ...options,
-    signal: controller.signal,
-  }).then(response => {
-    clearTimeout(timeoutId);
-    return response;
-  }).catch(error => {
-    clearTimeout(timeoutId);
-    if (error instanceof DOMException && error.name === 'AbortError') {
-      if (originalSignal?.aborted) throw error;
-      throw new Error(`Request timeout after ${FETCH_TIMEOUT_MS}ms`);
-    }
-    throw error;
-  });
-};
-
+// Cliente Supabase - SIN fetch custom
+// El fetch custom interfiere con las llamadas internas del SDK de auth
+// (signInWithPassword, getUser, refreshSession se cuelgan con wrappers de fetch)
+// Los timeouts se manejan a nivel de aplicacion con withTimeout() en auth-context
 export const supabase = createClient<Database>(
   supabaseUrl || '',
   supabaseAnonKey || '',
@@ -61,7 +28,6 @@ export const supabase = createClient<Database>(
       headers: {
         'x-my-custom-header': 'svd-trucks',
       },
-      fetch: fetchWithTimeout,
     },
   }
 );
