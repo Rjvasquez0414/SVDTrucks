@@ -201,31 +201,49 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             return;
           }
         } else if (pingResult.ok) {
-          // Token valido! Cargar perfil
-          addDebugLog('Token valido, cargando perfil con getUser()...');
+          // Token valido! Cargar perfil directamente desde la tabla usuarios
+          // NO usar supabase.auth.getUser() porque se cuelga internamente
+          addDebugLog('Token valido, cargando perfil directo (sin getUser)...');
           try {
-            const { data: { user }, error: userErr } = await withTimeout(
-              supabase.auth.getUser(),
-              10000,
-              'getUser'
-            );
-            addDebugLog(`getUser: user=${user ? 'SI' : 'NO'}, error=${userErr?.message || 'ninguno'}`);
+            // Decodificar el user ID del JWT (payload es la segunda parte en base64)
+            const jwtPayload = JSON.parse(atob(localSession.access_token.split('.')[1]));
+            const userId = jwtPayload.sub;
+            addDebugLog(`User ID del JWT: ${userId?.slice(0, 8)}...`);
 
-            if (user && !userErr && mounted) {
-              const profile = await fetchUserProfile(user);
-              if (profile && mounted) {
-                setUsuario(profile);
-                setConnectionStatus('connected');
-                addDebugLog(`EXITO: ${profile.nombre}`);
-              } else if (mounted) {
-                addDebugLog('Perfil no encontrado en tabla usuarios');
-                setConnectionStatus('idle');
+            if (userId && mounted) {
+              // Query directa a la tabla usuarios con fetch nativo (el SDK de query también podría colgarse)
+              const profileResponse = await withTimeout(
+                fetch(`${process.env.NEXT_PUBLIC_SUPABASE_URL}/rest/v1/usuarios?select=id,nombre,email,rol,avatar_url&id=eq.${userId}`, {
+                  headers: {
+                    'apikey': process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '',
+                    'Authorization': `Bearer ${localSession.access_token}`,
+                    'Accept': 'application/json',
+                  },
+                }),
+                8000,
+                'fetch-profile'
+              );
+
+              if (profileResponse.ok) {
+                const profiles = await profileResponse.json();
+                if (profiles.length > 0 && mounted) {
+                  const profile = profiles[0] as Usuario;
+                  setUsuario(profile);
+                  setConnectionStatus('connected');
+                  addDebugLog(`EXITO: ${profile.nombre}`);
+                } else if (mounted) {
+                  addDebugLog('Perfil no encontrado en tabla usuarios');
+                  setConnectionStatus('idle');
+                }
+              } else {
+                addDebugLog(`Error cargando perfil: status ${profileResponse.status}`);
+                if (mounted) setConnectionStatus('idle');
               }
             } else if (mounted) {
               setConnectionStatus('idle');
             }
-          } catch (getUserErr) {
-            addDebugLog(`getUser error: ${getUserErr instanceof Error ? getUserErr.message : String(getUserErr)}`);
+          } catch (profileErr) {
+            addDebugLog(`Profile error: ${profileErr instanceof Error ? profileErr.message : String(profileErr)}`);
             if (mounted) setConnectionStatus('idle');
           }
         } else {
@@ -284,54 +302,82 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   // Refrescar sesion cuando la ventana vuelve a ser visible
+  // Usa fetch nativo en vez del SDK de auth (que se cuelga)
   useEffect(() => {
     let isRefreshing = false;
 
     const handleVisibilityChange = async () => {
-      if (document.visibilityState !== 'visible' || isRefreshing) return;
+      if (document.visibilityState !== 'visible' || isRefreshing || !usuario) return;
 
       isRefreshing = true;
-      addDebugLog('Ventana visible - verificando sesion...');
 
       try {
-        const { data: { user }, error: userError } = await withTimeout(
-          supabase.auth.getUser(),
-          10000,
-          'visibility-getUser'
+        // Leer token actual de localStorage
+        const storageKey = Object.keys(localStorage).find(k => k.startsWith('sb-') && k.endsWith('-auth-token'));
+        if (!storageKey) {
+          isRefreshing = false;
+          return;
+        }
+        const stored = localStorage.getItem(storageKey);
+        if (!stored) {
+          isRefreshing = false;
+          return;
+        }
+        const session = JSON.parse(stored);
+
+        // Verificar si el token sigue siendo valido con un ping
+        const pingResult = await withTimeout(
+          fetch(`${process.env.NEXT_PUBLIC_SUPABASE_URL}/rest/v1/vehiculos?select=id&limit=1`, {
+            headers: {
+              'apikey': process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '',
+              'Authorization': `Bearer ${session.access_token}`,
+            },
+          }),
+          8000,
+          'visibility-ping'
         );
 
-        if (userError || !user) {
-          addDebugLog('Token invalido, intentando refresh...');
-          const { data: { session }, error: refreshError } = await withTimeout(
-            supabase.auth.refreshSession(),
-            10000,
-            'visibility-refresh'
-          );
+        if (pingResult.ok) {
+          setConnectionStatus('connected');
+        } else if (pingResult.status === 401) {
+          // Token expirado, intentar refresh via REST
+          addDebugLog('Visibility: token expirado, refrescando...');
+          try {
+            const refreshResp = await withTimeout(
+              fetch(`${process.env.NEXT_PUBLIC_SUPABASE_URL}/auth/v1/token?grant_type=refresh_token`, {
+                method: 'POST',
+                headers: {
+                  'apikey': process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '',
+                  'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({ refresh_token: session.refresh_token }),
+              }),
+              10000,
+              'visibility-refresh'
+            );
 
-          if (refreshError || !session) {
-            if (usuario) {
-              addDebugLog('Sesion expirada - logout local');
+            if (refreshResp.ok) {
+              const newSession = await refreshResp.json();
+              // Actualizar en localStorage
+              localStorage.setItem(storageKey, JSON.stringify(newSession));
+              // Tambien actualizar en el SDK
+              supabase.auth.setSession({
+                access_token: newSession.access_token,
+                refresh_token: newSession.refresh_token,
+              }).catch(() => {});
+              setConnectionStatus('connected');
+              addDebugLog('Visibility: token refrescado OK');
+            } else {
+              addDebugLog('Visibility: refresh fallido, sesion expirada');
               setUsuario(null);
               setConnectionStatus('idle');
             }
-            isRefreshing = false;
-            return;
+          } catch {
+            addDebugLog('Visibility: error en refresh');
           }
-
-          if (session.user) {
-            const profile = await fetchUserProfile(session.user);
-            if (profile) {
-              setUsuario(profile);
-              setConnectionStatus('connected');
-              addDebugLog('Reconexion exitosa');
-            }
-          }
-        } else {
-          setConnectionStatus('connected');
-          addDebugLog('Sesion valida');
         }
-      } catch (err) {
-        addDebugLog(`Error visibility: ${err instanceof Error ? err.message : String(err)}`);
+      } catch {
+        // Error silencioso - no deslogear por un glitch de red
       } finally {
         isRefreshing = false;
       }
@@ -341,7 +387,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return () => {
       document.removeEventListener('visibilitychange', handleVisibilityChange);
     };
-  }, [usuario, fetchUserProfile, addDebugLog]);
+  }, [usuario, addDebugLog]);
 
   // Funcion para reintentar conexion manualmente
   const retryConnection = useCallback(async () => {
@@ -372,44 +418,93 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const login = async (email: string, password: string): Promise<{ success: boolean; error?: string }> => {
     try {
       addDebugLog(`Login para: ${email}`);
-      const startTime = Date.now();
 
-      const { data, error } = await withTimeout(
-        supabase.auth.signInWithPassword({
-          email: email.toLowerCase().trim(),
-          password,
+      // Usar fetch nativo a la API de auth de Supabase directamente
+      // porque supabase.auth.signInWithPassword() se cuelga
+      const authResponse = await withTimeout(
+        fetch(`${process.env.NEXT_PUBLIC_SUPABASE_URL}/auth/v1/token?grant_type=password`, {
+          method: 'POST',
+          headers: {
+            'apikey': process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '',
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            email: email.toLowerCase().trim(),
+            password,
+          }),
         }),
         15000,
-        'signInWithPassword'
+        'login-fetch'
       );
 
-      addDebugLog(`signIn: ${Date.now() - startTime}ms`);
+      const authData = await authResponse.json();
+      addDebugLog(`Login response: status ${authResponse.status}`);
 
-      if (error) {
-        if (error.message.includes('Invalid login credentials')) {
+      if (!authResponse.ok) {
+        const errorMsg = authData?.error_description || authData?.msg || authData?.message || 'Error desconocido';
+        if (errorMsg.includes('Invalid login credentials')) {
           return { success: false, error: 'Credenciales incorrectas' };
         }
-        if (error.message.includes('Email not confirmed')) {
+        if (errorMsg.includes('Email not confirmed')) {
           return { success: false, error: 'Email no confirmado' };
         }
-        return { success: false, error: error.message };
+        return { success: false, error: errorMsg };
       }
 
-      if (!data.user) {
-        return { success: false, error: 'Error al iniciar sesion' };
+      // Guardar la sesion en el SDK de Supabase manualmente
+      if (authData.access_token && authData.refresh_token) {
+        addDebugLog('Login exitoso, guardando sesion...');
+        // setSession guarda en localStorage y emite SIGNED_IN
+        const { error: setError } = await withTimeout(
+          supabase.auth.setSession({
+            access_token: authData.access_token,
+            refresh_token: authData.refresh_token,
+          }),
+          10000,
+          'setSession'
+        );
+
+        if (setError) {
+          addDebugLog(`setSession error: ${setError.message}, guardando manualmente`);
+          // Fallback: guardar directamente en localStorage
+          const storageKey = Object.keys(localStorage).find(k => k.startsWith('sb-') && k.endsWith('-auth-token'));
+          if (storageKey) {
+            localStorage.setItem(storageKey, JSON.stringify(authData));
+          }
+        }
+
+        // Cargar perfil directamente via REST
+        const userId = authData.user?.id || JSON.parse(atob(authData.access_token.split('.')[1])).sub;
+        const profileResponse = await withTimeout(
+          fetch(`${process.env.NEXT_PUBLIC_SUPABASE_URL}/rest/v1/usuarios?select=id,nombre,email,rol,avatar_url&id=eq.${userId}`, {
+            headers: {
+              'apikey': process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '',
+              'Authorization': `Bearer ${authData.access_token}`,
+              'Accept': 'application/json',
+            },
+          }),
+          8000,
+          'login-profile'
+        );
+
+        if (profileResponse.ok) {
+          const profiles = await profileResponse.json();
+          if (profiles.length > 0) {
+            const profile = profiles[0] as Usuario;
+            setUsuario(profile);
+            setConnectionStatus('connected');
+            addDebugLog(`Login exitoso: ${profile.nombre}`);
+            return { success: true };
+          } else {
+            await supabase.auth.signOut().catch(() => {});
+            return { success: false, error: 'Usuario no tiene acceso al sistema' };
+          }
+        } else {
+          return { success: false, error: 'Error cargando perfil de usuario' };
+        }
       }
 
-      const profile = await fetchUserProfile(data.user);
-
-      if (!profile) {
-        await supabase.auth.signOut();
-        return { success: false, error: 'Usuario no tiene acceso al sistema' };
-      }
-
-      setUsuario(profile);
-      setConnectionStatus('connected');
-      addDebugLog(`Login exitoso: ${profile.nombre}`);
-      return { success: true };
+      return { success: false, error: 'Respuesta de autenticacion invalida' };
     } catch (error) {
       addDebugLog(`Login error: ${error instanceof Error ? error.message : String(error)}`);
       return { success: false, error: 'Error de conexion' };
