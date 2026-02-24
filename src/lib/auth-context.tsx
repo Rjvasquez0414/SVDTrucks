@@ -102,11 +102,24 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         throw new Error('No se puede conectar con el servidor');
       }
 
-      // Intentar obtener sesion existente
-      const { data: { session }, error } = await supabase.auth.getSession();
+      // Forzar refresh de la sesion contra el servidor (NO usar getSession que usa cache)
+      const { data: { session }, error } = await supabase.auth.refreshSession();
 
       if (error) {
-        throw error;
+        // Si el refresh falla, intentar getUser como fallback
+        const { data: { user } } = await supabase.auth.getUser();
+        if (user) {
+          const profile = await fetchUserProfile(user);
+          if (profile) {
+            setUsuario(profile);
+            setConnectionStatus('connected');
+          } else {
+            setConnectionStatus('idle');
+          }
+        } else {
+          setConnectionStatus('idle');
+        }
+        return;
       }
 
       if (session?.user) {
@@ -204,25 +217,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
     );
 
-    // Timeout de seguridad mas largo (10s) con logica de reintento
+    // Timeout de seguridad (10s) - si onAuthStateChange no respondio, intentar directamente
     const timeoutId = setTimeout(async () => {
       if (!initialCheckDone && mounted) {
-        console.warn('[Auth] TIMEOUT inicial - intentando reconexion...');
+        console.warn('[Auth] TIMEOUT inicial - intentando con getUser()...');
         setConnectionStatus('reconnecting');
-        setRetryCount(prev => prev + 1);
 
-        // Intentar obtener sesion directamente
         try {
-          const { data: { session }, error } = await supabase.auth.getSession();
-
-          if (error) {
-            throw error;
-          }
+          // Usar getUser() que valida contra el servidor
+          const { data: { user }, error } = await supabase.auth.getUser();
 
           if (mounted) {
-            if (session?.user) {
-              const profile = await fetchUserProfile(session.user);
-              if (profile) {
+            if (!error && user) {
+              const profile = await fetchUserProfile(user);
+              if (profile && mounted) {
                 setUsuario(profile);
                 setConnectionStatus('connected');
               }
@@ -235,42 +243,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         } catch (err) {
           console.error('[Auth] Error en timeout retry:', err);
           if (mounted) {
-            // Si falla, programar otro reintento
-            if (retryCount < MAX_RETRIES) {
-              retryTimeout = setTimeout(async () => {
-                if (mounted && !initialCheckDone) {
-                  console.log(`[Auth] Reintento ${retryCount + 1}/${MAX_RETRIES}...`);
-                  setRetryCount(prev => prev + 1);
-
-                  try {
-                    const { data: { session } } = await supabase.auth.getSession();
-                    if (session?.user) {
-                      const profile = await fetchUserProfile(session.user);
-                      if (profile && mounted) {
-                        setUsuario(profile);
-                        setConnectionStatus('connected');
-                      }
-                    } else if (mounted) {
-                      setConnectionStatus('idle');
-                    }
-                  } catch {
-                    if (mounted) {
-                      setConnectionStatus('error');
-                      setConnectionError('No se pudo establecer conexion. Intenta recargar la pagina.');
-                    }
-                  }
-                  if (mounted) {
-                    initialCheckDone = true;
-                    setIsLoading(false);
-                  }
-                }
-              }, RETRY_DELAY);
-            } else {
-              setConnectionStatus('error');
-              setConnectionError('No se pudo conectar despues de varios intentos.');
-              setIsLoading(false);
-              initialCheckDone = true;
-            }
+            setConnectionStatus('error');
+            setConnectionError('No se pudo conectar. Intenta recargar la pagina.');
+            setIsLoading(false);
+            initialCheckDone = true;
           }
         }
       }
@@ -286,37 +262,54 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [fetchUserProfile]); // Removido retryCount para evitar re-montar el listener
 
   // Refrescar sesion cuando la ventana vuelve a ser visible
-  // IMPORTANTE: Siempre verificar, no solo cuando no hay usuario
+  // CRITICO: Usar getUser() que valida contra el servidor, NO getSession() que usa cache local
   useEffect(() => {
-    const handleVisibilityChange = async () => {
-      if (document.visibilityState === 'visible') {
-        console.log('[Auth] Ventana visible - verificando sesion...');
-        try {
-          const { data: { session }, error } = await supabase.auth.getSession();
+    let isRefreshing = false;
 
-          if (error) {
-            console.error('[Auth] Error obteniendo sesion:', error);
-            setConnectionStatus('error');
+    const handleVisibilityChange = async () => {
+      if (document.visibilityState !== 'visible' || isRefreshing) return;
+
+      isRefreshing = true;
+      console.log('[Auth] Ventana visible - refrescando sesion con servidor...');
+
+      try {
+        // PASO 1: Forzar refresh del token contra el servidor de Supabase
+        // getUser() valida el token con el servidor (NO usa cache local como getSession)
+        const { data: { user }, error: userError } = await supabase.auth.getUser();
+
+        if (userError || !user) {
+          // El token no es valido - intentar refrescar
+          console.log('[Auth] Token invalido, intentando refreshSession...');
+          const { data: { session }, error: refreshError } = await supabase.auth.refreshSession();
+
+          if (refreshError || !session) {
+            if (usuario) {
+              console.log('[Auth] Sesion expirada - limpiando estado local');
+              setUsuario(null);
+              setConnectionStatus('idle');
+            }
+            isRefreshing = false;
             return;
           }
 
-          if (session?.user) {
-            // Verificar que el usuario aun existe y actualizar conexion
+          // Refresh exitoso, el usuario ahora es valido
+          if (session.user) {
             const profile = await fetchUserProfile(session.user);
             if (profile) {
               setUsuario(profile);
               setConnectionStatus('connected');
             }
-          } else if (usuario) {
-            // Habia usuario pero ya no hay sesion - cerrar sesion local
-            console.log('[Auth] Sesion expirada - limpiando estado local');
-            setUsuario(null);
-            setConnectionStatus('idle');
           }
-        } catch (err) {
-          console.error('[Auth] Error verificando sesion:', err);
-          setConnectionStatus('error');
+        } else {
+          // Token valido - solo actualizar estado de conexion
+          setConnectionStatus('connected');
         }
+      } catch (err) {
+        console.error('[Auth] Error refrescando sesion:', err);
+        // No marcar error inmediatamente - puede ser un glitch de red momentaneo
+        // Los datos ya cargados siguen visibles
+      } finally {
+        isRefreshing = false;
       }
     };
 
