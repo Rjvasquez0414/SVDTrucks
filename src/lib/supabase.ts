@@ -11,42 +11,41 @@ if (!supabaseUrl || !supabaseAnonKey) {
   });
 }
 
-// Timeout para peticiones HTTP (20 segundos)
-const FETCH_TIMEOUT_MS = 20_000;
+// Timeout para peticiones HTTP (15 segundos)
+const FETCH_TIMEOUT_MS = 15_000;
 
-// Fetch con timeout que respeta la signal original de Supabase
-const fetchWithTimeout: typeof fetch = async (url, options = {}) => {
+// Fetch con timeout - version simplificada y robusta
+const fetchWithTimeout: typeof fetch = (url, options = {}) => {
   const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
+  const timeoutId = setTimeout(() => {
+    console.warn(`[Fetch] Timeout ${FETCH_TIMEOUT_MS}ms para:`, typeof url === 'string' ? url.split('?')[0] : 'request');
+    controller.abort();
+  }, FETCH_TIMEOUT_MS);
 
-  // Si Supabase ya envio una signal, escuchar su abort tambien
-  const originalSignal = options.signal;
+  // Combinar signals: la nuestra (timeout) + la original de Supabase si existe
+  const originalSignal = options.signal as AbortSignal | undefined;
+  if (originalSignal?.aborted) {
+    clearTimeout(timeoutId);
+    return Promise.reject(new DOMException('Aborted', 'AbortError'));
+  }
   if (originalSignal) {
-    if (originalSignal.aborted) {
-      controller.abort();
-    } else {
-      originalSignal.addEventListener('abort', () => controller.abort(), { once: true });
-    }
+    originalSignal.addEventListener('abort', () => controller.abort(), { once: true });
   }
 
-  try {
-    const response = await fetch(url, {
-      ...options,
-      signal: controller.signal,
-    });
+  return fetch(url, {
+    ...options,
+    signal: controller.signal,
+  }).then(response => {
+    clearTimeout(timeoutId);
     return response;
-  } catch (error) {
-    if (error instanceof Error && error.name === 'AbortError') {
-      // Si fue abort por la signal original, propagar sin cambiar
-      if (originalSignal?.aborted) {
-        throw error;
-      }
+  }).catch(error => {
+    clearTimeout(timeoutId);
+    if (error instanceof DOMException && error.name === 'AbortError') {
+      if (originalSignal?.aborted) throw error;
       throw new Error(`Request timeout after ${FETCH_TIMEOUT_MS}ms`);
     }
     throw error;
-  } finally {
-    clearTimeout(timeoutId);
-  }
+  });
 };
 
 export const supabase = createClient<Database>(
