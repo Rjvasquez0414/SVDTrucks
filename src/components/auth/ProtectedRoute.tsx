@@ -23,7 +23,7 @@ const CONNECTION_MESSAGES = {
 };
 
 export function ProtectedRoute({ children }: ProtectedRouteProps) {
-  const { isAuthenticated, isLoading, connectionStatus, connectionError, retryConnection } = useAuth();
+  const { isAuthenticated, isLoading, connectionStatus, connectionError, retryConnection, debugLogs } = useAuth();
   const router = useRouter();
   const pathname = usePathname();
   const [loadingTime, setLoadingTime] = useState(0);
@@ -154,6 +154,18 @@ export function ProtectedRoute({ children }: ProtectedRouteProps) {
               <p className="text-xs text-muted-foreground mt-2">
                 Si el problema persiste, verifica tu conexion a internet o intenta mas tarde.
               </p>
+            </div>
+          )}
+
+          {/* Panel de debug - visible cuando tarda mas de 3 segundos */}
+          {loadingTime >= 3 && debugLogs.length > 0 && (
+            <div className="w-full mt-4 p-3 rounded-lg bg-black/90 text-left max-h-48 overflow-y-auto">
+              <p className="text-xs font-mono text-green-400 mb-2">Debug Log:</p>
+              {debugLogs.map((log, i) => (
+                <p key={i} className="text-[10px] font-mono text-green-300/80 leading-relaxed">
+                  {log}
+                </p>
+              ))}
             </div>
           )}
         </div>

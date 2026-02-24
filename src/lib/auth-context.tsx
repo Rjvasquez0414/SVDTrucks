@@ -23,6 +23,7 @@ interface AuthContextType {
   isAuthenticated: boolean;
   connectionStatus: ConnectionStatus;
   connectionError: string | null;
+  debugLogs: string[];
   login: (email: string, password: string) => Promise<{ success: boolean; error?: string }>;
   register: (nombre: string, email: string, password: string) => Promise<{ success: boolean; error?: string }>;
   logout: () => Promise<void>;
@@ -42,7 +43,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [connectionStatus, setConnectionStatus] = useState<ConnectionStatus>('connecting');
   const [connectionError, setConnectionError] = useState<string | null>(null);
   const [retryCount, setRetryCount] = useState(0);
+  const [debugLogs, setDebugLogs] = useState<string[]>([]);
   const router = useRouter();
+
+  // Debug logger que guarda logs en estado para mostrar en pantalla
+  const addDebugLog = useCallback((msg: string) => {
+    const timestamp = new Date().toLocaleTimeString('es-CO', { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' });
+    const entry = `[${timestamp}] ${msg}`;
+    console.log('[Auth-Debug]', msg);
+    setDebugLogs(prev => [...prev.slice(-19), entry]); // Mantener ultimos 20 logs
+  }, []);
 
   // Obtener perfil del usuario desde la tabla usuarios con retry
   const fetchUserProfile = useCallback(async (authUser: User, attempt = 1): Promise<Usuario | null> => {
@@ -144,7 +154,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   // Escuchar cambios de autenticacion con mejor manejo de errores
   useEffect(() => {
-    console.log('[Auth] Configurando listener de auth...');
+    addDebugLog('Configurando listener de auth...');
     let initialCheckDone = false;
     let mounted = true;
     let retryTimeout: NodeJS.Timeout | null = null;
@@ -152,38 +162,42 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const handleAuthEvent = async (event: string, session: { user: User } | null) => {
       if (!mounted) return;
 
-      console.log('[Auth] onAuthStateChange evento:', event);
+      addDebugLog(`onAuthStateChange: ${event} (session: ${session ? 'SI' : 'NO'})`);
 
       if (event === 'INITIAL_SESSION') {
         if (session?.user) {
-          console.log('[Auth] Sesion inicial encontrada, cargando perfil...');
+          addDebugLog(`Sesion inicial encontrada (uid: ${session.user.id.slice(0, 8)}...), cargando perfil...`);
           setConnectionStatus('connecting');
           try {
+            const t0 = Date.now();
             const profile = await fetchUserProfile(session.user);
+            addDebugLog(`fetchUserProfile tardo ${Date.now() - t0}ms, resultado: ${profile ? profile.nombre : 'NULL'}`);
             if (mounted) {
               if (profile) {
                 setUsuario(profile);
                 setConnectionStatus('connected');
+                addDebugLog('EXITO: Usuario cargado, isLoading -> false');
               } else {
                 setConnectionStatus('error');
                 setConnectionError('No se encontro el perfil de usuario');
+                addDebugLog('ERROR: Perfil no encontrado en tabla usuarios');
               }
             }
           } catch (err) {
-            console.error('[Auth] Error cargando perfil:', err);
+            addDebugLog(`ERROR cargando perfil: ${err instanceof Error ? err.message : String(err)}`);
             if (mounted) {
               setConnectionStatus('error');
               setConnectionError('Error al cargar el perfil');
             }
           }
         } else {
-          console.log('[Auth] No hay sesion inicial');
+          addDebugLog('No hay sesion inicial -> redirigir a login');
           if (mounted) setConnectionStatus('idle');
         }
         initialCheckDone = true;
         if (mounted) setIsLoading(false);
       } else if (event === 'SIGNED_IN' && session?.user) {
-        console.log('[Auth] Usuario inicio sesion');
+        addDebugLog('SIGNED_IN recibido');
         initialCheckDone = true;
         setConnectionStatus('connecting');
         try {
@@ -193,11 +207,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             setConnectionStatus('connected');
           }
         } catch (err) {
-          console.error('[Auth] Error cargando perfil:', err);
+          addDebugLog(`ERROR en SIGNED_IN: ${err instanceof Error ? err.message : String(err)}`);
         }
         if (mounted) setIsLoading(false);
       } else if (event === 'SIGNED_OUT') {
-        console.log('[Auth] Usuario cerro sesion');
+        addDebugLog('SIGNED_OUT recibido');
         if (mounted) {
           setUsuario(null);
           setIsLoading(false);
@@ -205,27 +219,30 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         }
         initialCheckDone = true;
       } else if (event === 'TOKEN_REFRESHED') {
-        console.log('[Auth] Token refrescado - sesion activa');
+        addDebugLog('TOKEN_REFRESHED recibido');
         if (mounted) setConnectionStatus('connected');
       }
     };
 
     // Usar onAuthStateChange como fuente principal
+    addDebugLog('Registrando onAuthStateChange...');
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       async (event, session) => {
         await handleAuthEvent(event, session);
       }
     );
+    addDebugLog('onAuthStateChange registrado, esperando INITIAL_SESSION...');
 
     // Timeout de seguridad (10s) - si onAuthStateChange no respondio, intentar directamente
     const timeoutId = setTimeout(async () => {
       if (!initialCheckDone && mounted) {
-        console.warn('[Auth] TIMEOUT inicial - intentando con getUser()...');
+        addDebugLog('TIMEOUT 10s! onAuthStateChange nunca respondio. Intentando getUser()...');
         setConnectionStatus('reconnecting');
 
         try {
-          // Usar getUser() que valida contra el servidor
+          const t0 = Date.now();
           const { data: { user }, error } = await supabase.auth.getUser();
+          addDebugLog(`getUser() tardo ${Date.now() - t0}ms, user: ${user ? 'SI' : 'NO'}, error: ${error?.message || 'ninguno'}`);
 
           if (mounted) {
             if (!error && user) {
@@ -233,15 +250,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
               if (profile && mounted) {
                 setUsuario(profile);
                 setConnectionStatus('connected');
+                addDebugLog('EXITO via timeout fallback');
               }
             } else {
               setConnectionStatus('idle');
+              addDebugLog('No hay usuario valido, idle');
             }
             initialCheckDone = true;
             setIsLoading(false);
           }
         } catch (err) {
-          console.error('[Auth] Error en timeout retry:', err);
+          addDebugLog(`ERROR en timeout: ${err instanceof Error ? err.message : String(err)}`);
           if (mounted) {
             setConnectionStatus('error');
             setConnectionError('No se pudo conectar. Intenta recargar la pagina.');
@@ -259,7 +278,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       subscription.unsubscribe();
     };
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [fetchUserProfile]); // Removido retryCount para evitar re-montar el listener
+  }, [fetchUserProfile, addDebugLog]); // Removido retryCount para evitar re-montar el listener
 
   // Refrescar sesion cuando la ventana vuelve a ser visible
   // CRITICO: Usar getUser() que valida contra el servidor, NO getSession() que usa cache local
@@ -435,6 +454,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         isAuthenticated: !!usuario,
         connectionStatus,
         connectionError,
+        debugLogs,
         login,
         register,
         logout,
