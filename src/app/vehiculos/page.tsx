@@ -14,6 +14,7 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { getVehiculos } from '@/lib/queries/vehiculos';
+import { useRefetchOnFocus } from '@/hooks/useRefetchOnFocus';
 import { Plus, Search, LayoutGrid, List, Loader2 } from 'lucide-react';
 import { EstadoVehiculo, VehiculoCompleto } from '@/types/database';
 import { formatNumber } from '@/lib/utils';
@@ -48,15 +49,11 @@ export default function VehiculosPage() {
   }, []);
 
   useEffect(() => {
-    // Cargar vehiculos al montar el componente
-    async function initVehiculos() {
-      setLoading(true);
-      const data = await getVehiculos();
-      setVehiculos(data);
-      setLoading(false);
-    }
-    initVehiculos();
-  }, []);
+    loadVehiculos();
+  }, [loadVehiculos]);
+
+  // Recargar cuando el usuario vuelve a la pestaña (si estuvo inactiva >1 min)
+  useRefetchOnFocus(loadVehiculos, 60_000);
 
   const handleNuevoVehiculo = () => {
     setVehiculoEditar(null);

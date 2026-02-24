@@ -30,6 +30,7 @@ import {
   type AlertaConVehiculo,
 } from '@/lib/queries/alertas';
 import { useAuth } from '@/lib/auth-context';
+import { useRefetchOnFocus } from '@/hooks/useRefetchOnFocus';
 import type { TipoAlerta, PrioridadAlerta } from '@/types/database';
 import { cn, formatNumber } from '@/lib/utils';
 import Link from 'next/link';
@@ -113,6 +114,9 @@ export default function AlertasPage() {
     }
     initAlertas();
   }, [cargarAlertas]);
+
+  // Recargar alertas cuando el usuario vuelve a la pestaña
+  useRefetchOnFocus(cargarAlertas, 60_000);
 
   // Generar nuevas alertas
   const handleGenerarAlertas = async () => {

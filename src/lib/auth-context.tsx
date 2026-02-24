@@ -1,6 +1,6 @@
 'use client';
 
-import { createContext, useContext, useState, useEffect, useCallback, ReactNode } from 'react';
+import { createContext, useContext, useState, useEffect, useCallback, useRef, ReactNode } from 'react';
 import { useRouter } from 'next/navigation';
 import { supabase } from './supabase';
 import type { User } from '@supabase/supabase-js';
@@ -111,10 +111,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }, [fetchUserProfile, addDebugLog]);
 
+  // Ref para rastrear si la inicializacion ya completo (evita stale closure en el timeout)
+  const initCompletedRef = useRef(false);
+
   // Listener principal de auth
   useEffect(() => {
     addDebugLog('Configurando onAuthStateChange...');
     let mounted = true;
+    initCompletedRef.current = false;
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       async (event, session) => {
@@ -142,7 +146,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             addDebugLog('Sin sesion -> login');
             if (mounted) setConnectionStatus('idle');
           }
-          if (mounted) setIsLoading(false);
+          if (mounted) {
+            initCompletedRef.current = true;
+            setIsLoading(false);
+          }
         } else if (event === 'SIGNED_IN' && session?.user) {
           addDebugLog('SIGNED_IN');
           const profile = await fetchUserProfile(session.user);
@@ -150,13 +157,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             setUsuario(profile);
             setConnectionStatus('connected');
           }
-          if (mounted) setIsLoading(false);
+          if (mounted) {
+            initCompletedRef.current = true;
+            setIsLoading(false);
+          }
         } else if (event === 'SIGNED_OUT') {
           addDebugLog('SIGNED_OUT');
           if (mounted) {
             setUsuario(null);
             setIsLoading(false);
             setConnectionStatus('idle');
+            initCompletedRef.current = true;
           }
         } else if (event === 'TOKEN_REFRESHED') {
           addDebugLog('TOKEN_REFRESHED');
@@ -167,9 +178,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     addDebugLog('onAuthStateChange registrado');
 
-    // Timeout de seguridad (15s)
+    // Timeout de seguridad (15s) - usa ref para evitar stale closure
     const timeoutId = setTimeout(() => {
-      if (mounted && isLoading) {
+      if (mounted && !initCompletedRef.current) {
         addDebugLog('TIMEOUT 15s - forzando resolucion');
         setConnectionStatus('error');
         setConnectionError('La conexion tardo demasiado. Intenta recargar.');

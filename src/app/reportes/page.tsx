@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useCallback } from 'react';
 import { MainLayout } from '@/components/layout/MainLayout';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -30,6 +30,7 @@ import {
 import { getVehiculos } from '@/lib/queries/vehiculos';
 import { getMantenimientos, type MantenimientoConVehiculo } from '@/lib/queries/mantenimientos';
 import { getCategoriaInfo } from '@/data/tipos-mantenimiento';
+import { useRefetchOnFocus } from '@/hooks/useRefetchOnFocus';
 import { DollarSign, Wrench, Truck, Loader2, Calendar, TrendingUp, Download, FileText, FileSpreadsheet, FileIcon } from 'lucide-react';
 import type { VehiculoCompleto } from '@/types/database';
 import { exportToPDF, exportToExcel, exportToWord, type ReportData } from '@/lib/export-utils';
@@ -139,19 +140,28 @@ export default function ReportesPage() {
     });
   }, [mantenimientos, añoSeleccionado]);
 
-  // Cargar datos iniciales
-  useEffect(() => {
-    async function loadData() {
+  const loadData = useCallback(async () => {
+    try {
       const [mantsData, vehsData] = await Promise.all([
         getMantenimientos(),
         getVehiculos(),
       ]);
       setMantenimientos(mantsData);
       setVehiculos(vehsData);
+    } catch (err) {
+      console.error('[Reportes] Error cargando datos:', err);
+    } finally {
       setLoading(false);
     }
-    loadData();
   }, []);
+
+  // Cargar datos iniciales
+  useEffect(() => {
+    loadData();
+  }, [loadData]);
+
+  // Recargar cuando el usuario vuelve a la pestaña
+  useRefetchOnFocus(loadData, 5 * 60_000);
 
   // Filtrar mantenimientos del periodo seleccionado
   const mantenimientosPeriodo = useMemo(() => {

@@ -42,6 +42,7 @@ import {
 import { getVehiculos } from '@/lib/queries/vehiculos';
 import { getDocumentosCompletos, deleteDocumento } from '@/lib/queries/documentos';
 import { supabase } from '@/lib/supabase';
+import { useRefetchOnFocus } from '@/hooks/useRefetchOnFocus';
 import { VehiculoCompleto, Documento, TipoDocumento, CategoriaDocumento, EstadoDocumento } from '@/types/database';
 import { cn } from '@/lib/utils';
 import { DocumentoModal } from '@/components/documentos/DocumentoModal';
@@ -305,6 +306,24 @@ export default function DocumentacionPage() {
     }
   }, [vehiculoSeleccionado]);
 
+  // Recargar todos los datos (vehiculos + documentos del seleccionado)
+  const reloadAll = useCallback(async () => {
+    try {
+      const data = await getVehiculos();
+      setVehiculos(data);
+      // Recargar documentos del vehiculo actualmente seleccionado
+      if (selectedVehiculo) {
+        const veh = data.find(v => v.id === selectedVehiculo);
+        if (veh) {
+          const docs = await getDocumentosCompletos(veh.id, veh.remolque_id, veh.conductor_id);
+          setDocumentos(docs);
+        }
+      }
+    } catch (error) {
+      console.error('Error recargando datos:', error);
+    }
+  }, [selectedVehiculo]);
+
   // Cargar vehiculos al inicio
   useEffect(() => {
     async function loadData() {
@@ -325,6 +344,9 @@ export default function DocumentacionPage() {
       cargarDocumentos();
     }
   }, [vehiculoSeleccionado, cargarDocumentos]);
+
+  // Recargar cuando el usuario vuelve a la pestaña (si estuvo inactiva >1 min)
+  useRefetchOnFocus(reloadAll, 60_000);
 
   // Filtrar documentos por categoria
   const getDocumentosPorCategoria = (categoria: CategoriaDocumento): Documento[] => {

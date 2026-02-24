@@ -25,6 +25,30 @@ const noopLock = async <R>(
   return fn();
 };
 
+// Fetch con timeout global para evitar que las peticiones HTTP se cuelguen
+// cuando el navegador retoma una pestaña con conexiones TCP muertas.
+const FETCH_TIMEOUT_MS = 15_000;
+
+const fetchWithTimeout: typeof fetch = (input, init) => {
+  const controller = new AbortController();
+
+  // Si el caller ya tiene un signal, propagar su abort
+  const callerSignal = init?.signal;
+  if (callerSignal) {
+    if (callerSignal.aborted) {
+      controller.abort(callerSignal.reason);
+    } else {
+      callerSignal.addEventListener('abort', () => controller.abort(callerSignal.reason), { once: true });
+    }
+  }
+
+  const timeoutId = setTimeout(() => controller.abort(new Error('Timeout')), FETCH_TIMEOUT_MS);
+
+  return fetch(input, { ...init, signal: controller.signal }).finally(() => {
+    clearTimeout(timeoutId);
+  });
+};
+
 export const supabase = createClient<Database>(
   supabaseUrl || '',
   supabaseAnonKey || '',
@@ -39,6 +63,7 @@ export const supabase = createClient<Database>(
       headers: {
         'x-my-custom-header': 'svd-trucks',
       },
+      fetch: fetchWithTimeout,
     },
   }
 );

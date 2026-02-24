@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { MainLayout } from '@/components/layout/MainLayout';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -30,6 +30,7 @@ import {
 import { getVehiculos } from '@/lib/queries/vehiculos';
 import { getMantenimientos, type MantenimientoConVehiculo } from '@/lib/queries/mantenimientos';
 import { getCategoriaInfo, catalogoMantenimiento } from '@/data/tipos-mantenimiento';
+import { useRefetchOnFocus } from '@/hooks/useRefetchOnFocus';
 import { Plus, Search, Calendar, Wrench, Eye, Loader2 } from 'lucide-react';
 import type { TipoMantenimiento, VehiculoCompleto, CategoriaMantenimiento } from '@/types/database';
 import { formatNumber } from '@/lib/utils';
@@ -47,19 +48,28 @@ export default function MantenimientosPage() {
   const [mantenimientoSeleccionado, setMantenimientoSeleccionado] = useState<MantenimientoConVehiculo | null>(null);
   const [modalAbierto, setModalAbierto] = useState(false);
 
-  // Cargar datos
-  useEffect(() => {
-    async function loadData() {
+  const loadData = useCallback(async () => {
+    try {
       const [mantsData, vehsData] = await Promise.all([
         getMantenimientos(),
         getVehiculos(),
       ]);
       setMantenimientos(mantsData);
       setVehiculos(vehsData);
+    } catch (err) {
+      console.error('[Mantenimientos] Error cargando datos:', err);
+    } finally {
       setLoading(false);
     }
-    loadData();
   }, []);
+
+  // Cargar datos
+  useEffect(() => {
+    loadData();
+  }, [loadData]);
+
+  // Recargar cuando el usuario vuelve a la pestaña
+  useRefetchOnFocus(loadData, 60_000);
 
   const mantenimientosFiltrados = mantenimientos
     .filter((m) => {
