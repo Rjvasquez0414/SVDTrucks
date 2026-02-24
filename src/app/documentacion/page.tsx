@@ -327,13 +327,17 @@ export default function DocumentacionPage() {
   // Cargar vehiculos al inicio
   useEffect(() => {
     async function loadData() {
-      setLoading(true);
-      const data = await getVehiculos();
-      setVehiculos(data);
-      if (data.length > 0) {
-        setSelectedVehiculo(data[0].id);
+      try {
+        const data = await getVehiculos();
+        setVehiculos(data);
+        if (data.length > 0) {
+          setSelectedVehiculo(data[0].id);
+        }
+      } catch (err) {
+        console.error('[Documentacion] Error cargando vehiculos:', err);
+      } finally {
+        setLoading(false);
       }
-      setLoading(false);
     }
     loadData();
   }, []);

@@ -196,42 +196,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Refrescar sesion cuando la ventana vuelve a ser visible
-  useEffect(() => {
-    let isRefreshing = false;
-
-    const handleVisibilityChange = async () => {
-      if (document.visibilityState !== 'visible' || isRefreshing || !usuario) return;
-
-      isRefreshing = true;
-
-      try {
-        const { data: { user }, error } = await supabase.auth.getUser();
-
-        if (error || !user) {
-          // Token invalido, intentar refresh
-          const { data: { session } } = await supabase.auth.refreshSession();
-          if (!session) {
-            setUsuario(null);
-            setConnectionStatus('idle');
-          } else {
-            setConnectionStatus('connected');
-          }
-        } else {
-          setConnectionStatus('connected');
-        }
-      } catch {
-        // Error silencioso
-      } finally {
-        isRefreshing = false;
-      }
-    };
-
-    document.addEventListener('visibilitychange', handleVisibilityChange);
-    return () => {
-      document.removeEventListener('visibilitychange', handleVisibilityChange);
-    };
-  }, [usuario]);
+  // No necesitamos handleVisibilityChange para auth:
+  // - autoRefreshToken: true ya renueva el token automaticamente
+  // - onAuthStateChange escucha TOKEN_REFRESHED y SIGNED_OUT
+  // - El handler anterior llamaba getUser() al volver a la pestaña,
+  //   lo cual podia colgar 15-30s por conexion TCP muerta y luego
+  //   borrar el usuario causando un redirect loop a /login
 
   const login = async (email: string, password: string): Promise<{ success: boolean; error?: string }> => {
     try {

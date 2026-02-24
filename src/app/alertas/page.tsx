@@ -74,13 +74,18 @@ export default function AlertasPage() {
 
   // Cargar alertas
   const cargarAlertas = useCallback(async () => {
-    const [alertasData, conteoData] = await Promise.all([
-      getAlertasPendientes(),
-      contarAlertasPorPrioridad(),
-    ]);
-    setAlertas(alertasData);
-    setConteo(conteoData);
-    setLoading(false);
+    try {
+      const [alertasData, conteoData] = await Promise.all([
+        getAlertasPendientes(),
+        contarAlertasPorPrioridad(),
+      ]);
+      setAlertas(alertasData);
+      setConteo(conteoData);
+    } catch (err) {
+      console.error('[Alertas] Error cargando:', err);
+    } finally {
+      setLoading(false);
+    }
   }, []);
 
   // Generar alertas automaticamente al cargar la pagina

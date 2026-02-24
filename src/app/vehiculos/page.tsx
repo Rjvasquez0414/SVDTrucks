@@ -42,10 +42,14 @@ export default function VehiculosPage() {
     .sort((a, b) => a.nombre.localeCompare(b.nombre));
 
   const loadVehiculos = useCallback(async () => {
-    setLoading(true);
-    const data = await getVehiculos();
-    setVehiculos(data);
-    setLoading(false);
+    try {
+      const data = await getVehiculos();
+      setVehiculos(data);
+    } catch (err) {
+      console.error('[Vehiculos] Error cargando:', err);
+    } finally {
+      setLoading(false);
+    }
   }, []);
 
   useEffect(() => {
