@@ -3,7 +3,9 @@
 import { useEffect, useRef } from 'react';
 
 /**
- * Hook para recargar datos cuando el usuario vuelve a la pestaña
+ * Hook para recargar datos cuando el usuario vuelve a la pestaña.
+ * Espera 800ms antes de refrescar para dar tiempo a que el navegador
+ * restablezca las conexiones TCP que murieron en segundo plano.
  */
 export function useRefetchOnFocus(
   refetchFn: () => void | Promise<void>,
@@ -18,20 +20,26 @@ export function useRefetchOnFocus(
       isFirstMount.current = false;
     }
 
-    const handleVisibilityChange = async () => {
-      if (document.visibilityState === 'visible') {
-        const timeSinceLastFetch = Date.now() - lastFetchRef.current;
+    const handleVisibilityChange = () => {
+      if (document.visibilityState !== 'visible') return;
 
-        if (timeSinceLastFetch > staleTimeMs) {
-          console.log(`[RefetchOnFocus] Recargando (${Math.round(timeSinceLastFetch / 1000)}s inactivo)`);
-          lastFetchRef.current = Date.now();
-          try {
-            await refetchFn();
-          } catch (err) {
-            console.error('[RefetchOnFocus] Error:', err);
-          }
+      const timeSinceLastFetch = Date.now() - lastFetchRef.current;
+      if (timeSinceLastFetch <= staleTimeMs) return;
+
+      // Esperar un momento para que el staleAbort en supabase.ts
+      // limpie las conexiones muertas y el navegador abra nuevas
+      setTimeout(async () => {
+        // Verificar que la pestaña sigue visible
+        if (document.visibilityState !== 'visible') return;
+
+        console.log(`[RefetchOnFocus] Recargando (${Math.round(timeSinceLastFetch / 1000)}s inactivo)`);
+        lastFetchRef.current = Date.now();
+        try {
+          await refetchFn();
+        } catch (err) {
+          console.error('[RefetchOnFocus] Error:', err);
         }
-      }
+      }, 800);
     };
 
     const handleOnline = async () => {

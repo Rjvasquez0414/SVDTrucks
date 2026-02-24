@@ -25,12 +25,40 @@ const noopLock = async <R>(
   return fn();
 };
 
-// Fetch con timeout global para evitar que las peticiones HTTP se cuelguen
-// cuando el navegador retoma una pestaña con conexiones TCP muertas.
-const FETCH_TIMEOUT_MS = 15_000;
+// --- Fetch resiliente para manejar conexiones TCP muertas al cambiar de pestaña ---
+//
+// Problema: cuando el navegador suspende una pestaña, las conexiones HTTP/2 a
+// Supabase mueren silenciosamente. Al reactivar la pestaña, las peticiones HTTP
+// intentan usar la conexion muerta y se cuelgan indefinidamente.
+//
+// Solucion:
+// 1. Timeout corto (5s) para detectar conexiones muertas rapidamente
+// 2. Reintento automatico (1 vez) - el primer timeout fuerza al navegador a
+//    detectar la conexion muerta; el reintento usa una conexion fresca
+// 3. Al cambiar de pestaña, abortar todas las peticiones pendientes en
+//    conexiones stale para que no bloqueen las nuevas
+const FETCH_TIMEOUT_MS = 5_000;
+const MAX_RETRIES = 1;
+const RETRY_DELAY_MS = 500;
 
-const fetchWithTimeout: typeof fetch = (input, init) => {
+// Abortar peticiones pendientes cuando la pestaña vuelve a ser visible
+// (las conexiones de cuando estaba en segundo plano estan muertas)
+let staleAbort = new AbortController();
+
+if (typeof document !== 'undefined') {
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible') {
+      staleAbort.abort();
+      staleAbort = new AbortController();
+    }
+  });
+}
+
+function singleFetch(input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
   const controller = new AbortController();
+
+  // Abortar si las conexiones stale son invalidadas (visibility change)
+  staleAbort.signal.addEventListener('abort', () => controller.abort(), { once: true });
 
   // Si el caller ya tiene un signal, propagar su abort
   const callerSignal = init?.signal;
@@ -47,6 +75,32 @@ const fetchWithTimeout: typeof fetch = (input, init) => {
   return fetch(input, { ...init, signal: controller.signal }).finally(() => {
     clearTimeout(timeoutId);
   });
+}
+
+const fetchWithRetry: typeof fetch = async (input, init) => {
+  const callerSignal = init?.signal;
+
+  for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
+    // No reintentar si el caller aborto
+    if (callerSignal?.aborted) {
+      throw new DOMException('The operation was aborted.', 'AbortError');
+    }
+
+    try {
+      return await singleFetch(input, init);
+    } catch (err) {
+      // Si el caller aborto, no reintentar
+      if (callerSignal?.aborted) throw err;
+
+      // Si es el ultimo intento, lanzar el error
+      if (attempt >= MAX_RETRIES) throw err;
+
+      // Esperar antes de reintentar (da tiempo al navegador para abrir conexion fresca)
+      await new Promise(resolve => setTimeout(resolve, RETRY_DELAY_MS));
+    }
+  }
+
+  throw new Error('Unreachable');
 };
 
 export const supabase = createClient<Database>(
@@ -63,7 +117,7 @@ export const supabase = createClient<Database>(
       headers: {
         'x-my-custom-header': 'svd-trucks',
       },
-      fetch: fetchWithTimeout,
+      fetch: fetchWithRetry,
     },
   }
 );
