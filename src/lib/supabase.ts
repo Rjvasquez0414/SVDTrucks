@@ -11,10 +11,20 @@ if (!supabaseUrl || !supabaseAnonKey) {
   });
 }
 
-// Cliente Supabase - SIN fetch custom
-// El fetch custom interfiere con las llamadas internas del SDK de auth
-// (signInWithPassword, getUser, refreshSession se cuelgan con wrappers de fetch)
-// Los timeouts se manejan a nivel de aplicacion con withTimeout() en auth-context
+// Desactivar navigator.locks que causa deadlocks en el SDK de Supabase Auth.
+// El SDK usa navigator.locks.request() para coordinar operaciones de auth,
+// pero el lock se queda atascado al cambiar de pestaña, causando que
+// getUser(), signInWithPassword(), onAuthStateChange(INITIAL_SESSION), etc.
+// se cuelguen para siempre. Al pasar un lock no-op, las funciones se
+// ejecutan directamente sin esperar.
+const noopLock = async <R>(
+  _name: string,
+  _acquireTimeout: number,
+  fn: () => Promise<R>
+): Promise<R> => {
+  return fn();
+};
+
 export const supabase = createClient<Database>(
   supabaseUrl || '',
   supabaseAnonKey || '',
@@ -23,6 +33,7 @@ export const supabase = createClient<Database>(
       autoRefreshToken: true,
       persistSession: true,
       detectSessionInUrl: true,
+      lock: noopLock,
     },
     global: {
       headers: {
