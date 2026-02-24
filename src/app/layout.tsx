@@ -14,7 +14,7 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "SVD Trucks - Sistema de Gestion de Flotas",
+  title: "EAM DIONE - Sistema de Gestion de Flotas",
   description: "Sistema de control de mantenimiento preventivo y correctivo para flotas de camiones",
 };
 

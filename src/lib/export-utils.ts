@@ -48,7 +48,7 @@ export async function exportToPDF(data: ReportData): Promise<void> {
   // Titulo
   doc.setFontSize(18);
   doc.setFont('helvetica', 'bold');
-  doc.text('SVD Trucks - Reporte de Mantenimientos', 14, 20);
+  doc.text('EAM DIONE - Reporte de Mantenimientos', 14, 20);
 
   // Subtitulo con periodo
   doc.setFontSize(12);
@@ -130,7 +130,7 @@ export async function exportToExcel(data: ReportData): Promise<void> {
 
   // Hoja de resumen
   const resumenData = [
-    ['SVD Trucks - Reporte de Mantenimientos'],
+    ['EAM DIONE - Reporte de Mantenimientos'],
     [''],
     ['Periodo:', data.periodo],
     ['Fecha de Generacion:', data.fechaGeneracion],
@@ -236,7 +236,7 @@ export async function exportToWord(data: ReportData): Promise<void> {
       children: [
         // Titulo
         new Paragraph({
-          children: [new TextRun({ text: 'SVD Trucks', bold: true, size: 36 })],
+          children: [new TextRun({ text: 'EAM DIONE', bold: true, size: 36 })],
           heading: HeadingLevel.HEADING_1,
         }),
         new Paragraph({

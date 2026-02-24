@@ -67,7 +67,7 @@ export default function RegistroPage() {
           <div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-primary mb-4">
             <Truck className="h-8 w-8 text-primary-foreground" />
           </div>
-          <h1 className="text-2xl font-bold text-slate-900">SVD Trucks</h1>
+          <h1 className="text-2xl font-bold text-slate-900">EAM DIONE</h1>
           <p className="text-slate-600 mt-1">Sistema de Gestion de Flotas</p>
         </div>
 
@@ -198,7 +198,7 @@ export default function RegistroPage() {
 
         {/* Footer */}
         <p className="text-center text-xs text-muted-foreground mt-6">
-          SVD Trucks - Sistema de Gestion de Flotas
+          EAM DIONE - Sistema de Gestion de Flotas
         </p>
       </div>
     </div>

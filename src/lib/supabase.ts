@@ -92,7 +92,7 @@ export const supabase = createClient<Database>(
     },
     global: {
       headers: {
-        'x-my-custom-header': 'svd-trucks',
+        'x-my-custom-header': 'eam-dione',
       },
       fetch: fetchWithRetry,
     },

@@ -1,4 +1,4 @@
-// Tipos principales para SVD Trucks
+// Tipos principales para EAM DIONE
 
 export type TipoVehiculo = 'camion' | 'tractomula' | 'volqueta';
 export type EstadoVehiculo = 'activo' | 'en_mantenimiento' | 'inactivo';
