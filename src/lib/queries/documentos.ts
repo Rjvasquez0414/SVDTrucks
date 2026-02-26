@@ -173,6 +173,24 @@ export async function deleteDocumento(id: string): Promise<boolean> {
 }
 
 /**
+ * Obtiene todos los documentos de impuestos de todos los vehiculos
+ */
+export async function getImpuestosDocumentos(): Promise<Documento[]> {
+  const { data, error } = await supabase
+    .from('documentos' as 'vehiculos')
+    .select('*')
+    .eq('tipo', 'impuestos')
+    .order('created_at', { ascending: true });
+
+  if (error) {
+    console.error('Error fetching impuestos:', error);
+    return [];
+  }
+
+  return (data as unknown as Documento[]) || [];
+}
+
+/**
  * Obtiene documentos proximos a vencer (30 dias)
  */
 export async function getDocumentosProximosVencer(dias: number = 30): Promise<Documento[]> {

@@ -38,9 +38,21 @@ import {
   Trash2,
   Download,
   ExternalLink,
+  Receipt,
+  Pencil,
 } from 'lucide-react';
+import {
+  Table,
+  TableHeader,
+  TableBody,
+  TableHead,
+  TableRow,
+  TableCell,
+} from '@/components/ui/table';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
 import { getVehiculos } from '@/lib/queries/vehiculos';
-import { getDocumentosCompletos, deleteDocumento } from '@/lib/queries/documentos';
+import { getDocumentosCompletos, deleteDocumento, getImpuestosDocumentos, createDocumento, updateDocumento } from '@/lib/queries/documentos';
 import { supabase } from '@/lib/supabase';
 import { useRefetchOnFocus } from '@/hooks/useRefetchOnFocus';
 import { VehiculoCompleto, Documento, TipoDocumento, CategoriaDocumento, EstadoDocumento } from '@/types/database';
@@ -285,6 +297,15 @@ export default function DocumentacionPage() {
   // Estado para previsualizar documento
   const [documentoPreview, setDocumentoPreview] = useState<Documento | null>(null);
 
+  // Estado para la seccion de Impuestos
+  const [impuestosDocs, setImpuestosDocs] = useState<Documento[]>([]);
+  const [loadingImpuestos, setLoadingImpuestos] = useState(false);
+  const [impuestoEditVehiculo, setImpuestoEditVehiculo] = useState<VehiculoCompleto | null>(null);
+  const [impuestoEditDoc, setImpuestoEditDoc] = useState<Documento | null>(null);
+  const [impuestoForm, setImpuestoForm] = useState({ jurisdiccion: '', vencimientoPlazo: '', fechaPago: '', mora: '' });
+  const [savingImpuesto, setSavingImpuesto] = useState(false);
+  const [impuestoError, setImpuestoError] = useState<string | null>(null);
+
   const vehiculoSeleccionado = vehiculos.find((v) => v.id === selectedVehiculo);
 
   // Cargar documentos del vehiculo seleccionado
@@ -324,6 +345,68 @@ export default function DocumentacionPage() {
     }
   }, [selectedVehiculo]);
 
+  // Cargar impuestos de todos los vehiculos
+  const cargarImpuestos = useCallback(async () => {
+    setLoadingImpuestos(true);
+    try {
+      const docs = await getImpuestosDocumentos();
+      setImpuestosDocs(docs);
+    } catch (error) {
+      console.error('Error cargando impuestos:', error);
+    } finally {
+      setLoadingImpuestos(false);
+    }
+  }, []);
+
+  // Abrir modal editar impuesto
+  const handleEditImpuesto = (vehiculo: VehiculoCompleto) => {
+    const doc = impuestosDocs.find(d => d.vehiculo_id === vehiculo.id);
+    setImpuestoEditVehiculo(vehiculo);
+    setImpuestoEditDoc(doc || null);
+    setImpuestoForm({
+      jurisdiccion: doc?.entidad_emisora || vehiculo.lugar_matricula || '',
+      vencimientoPlazo: doc?.fecha_vencimiento || '',
+      fechaPago: doc?.fecha_emision || '',
+      mora: doc?.notas || '',
+    });
+    setImpuestoError(null);
+  };
+
+  // Guardar impuesto
+  const handleSaveImpuesto = async () => {
+    if (!impuestoEditVehiculo) return;
+    setSavingImpuesto(true);
+    setImpuestoError(null);
+    try {
+      if (impuestoEditDoc) {
+        await updateDocumento(impuestoEditDoc.id, {
+          entidad_emisora: impuestoForm.jurisdiccion || null,
+          fecha_vencimiento: impuestoForm.vencimientoPlazo || null,
+          fecha_emision: impuestoForm.fechaPago || null,
+          notas: impuestoForm.mora || null,
+        });
+      } else {
+        await createDocumento({
+          tipo: 'impuestos',
+          categoria: 'cabezote',
+          nombre: 'Impuestos',
+          vehiculo_id: impuestoEditVehiculo.id,
+          entidad_emisora: impuestoForm.jurisdiccion || null,
+          fecha_vencimiento: impuestoForm.vencimientoPlazo || null,
+          fecha_emision: impuestoForm.fechaPago || null,
+          notas: impuestoForm.mora || null,
+        });
+      }
+      setImpuestoEditVehiculo(null);
+      await cargarImpuestos();
+    } catch (error) {
+      console.error('Error guardando impuesto:', error);
+      setImpuestoError(error instanceof Error ? error.message : 'Error al guardar');
+    } finally {
+      setSavingImpuesto(false);
+    }
+  };
+
   // Cargar vehiculos al inicio
   useEffect(() => {
     async function loadData() {
@@ -348,6 +431,13 @@ export default function DocumentacionPage() {
       cargarDocumentos();
     }
   }, [vehiculoSeleccionado, cargarDocumentos]);
+
+  // Cargar impuestos cuando se cargan los vehiculos
+  useEffect(() => {
+    if (vehiculos.length > 0) {
+      cargarImpuestos();
+    }
+  }, [vehiculos.length, cargarImpuestos]);
 
   // Recargar cuando el usuario vuelve a la pestaña (si estuvo inactiva >1 min)
   useRefetchOnFocus(reloadAll, 60_000);
@@ -531,7 +621,7 @@ export default function DocumentacionPage() {
 
       {/* Tabs de categorias */}
       <Tabs defaultValue="cabezote" className="space-y-4">
-        <TabsList className="grid w-full grid-cols-4">
+        <TabsList className="grid w-full grid-cols-5">
           <TabsTrigger value="cabezote" className="flex items-center gap-2">
             <Truck className="h-4 w-4" />
             <span className="hidden sm:inline">Cabezote</span>
@@ -547,6 +637,10 @@ export default function DocumentacionPage() {
           <TabsTrigger value="polizas" className="flex items-center gap-2">
             <Shield className="h-4 w-4" />
             <span className="hidden sm:inline">Polizas</span>
+          </TabsTrigger>
+          <TabsTrigger value="impuestos" className="flex items-center gap-2">
+            <Receipt className="h-4 w-4" />
+            <span className="hidden sm:inline">Impuestos</span>
           </TabsTrigger>
         </TabsList>
 
@@ -599,6 +693,103 @@ export default function DocumentacionPage() {
             onEliminarDocumento={(doc) => setDocumentoAEliminar(doc)}
             onPrevisualizarDocumento={handlePrevisualizarDocumento}
           />
+        </TabsContent>
+
+        <TabsContent value="impuestos">
+          <Card>
+            <CardHeader className="pb-3">
+              <div className="flex items-center justify-between">
+                <CardTitle className="text-base flex items-center gap-2">
+                  <Receipt className="h-5 w-5" />
+                  Impuesto de Vehiculos
+                </CardTitle>
+                <Badge variant="secondary">Se renueva anualmente</Badge>
+              </div>
+            </CardHeader>
+            <CardContent>
+              {loadingImpuestos ? (
+                <div className="flex items-center justify-center py-8">
+                  <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+                </div>
+              ) : (
+                <>
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead className="w-12">No.</TableHead>
+                        <TableHead>Placa Cabezote</TableHead>
+                        <TableHead>Jurisdiccion</TableHead>
+                        <TableHead>Vencimiento del Plazo para Declarar</TableHead>
+                        <TableHead>Fecha de Pago</TableHead>
+                        <TableHead>Mora</TableHead>
+                        <TableHead>Estado</TableHead>
+                        <TableHead className="text-right">Acciones</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {vehiculos.map((v, idx) => {
+                        const doc = impuestosDocs.find(d => d.vehiculo_id === v.id);
+                        const estado = doc
+                          ? calcularEstadoDocumento(doc.fecha_vencimiento)
+                          : 'sin_registrar';
+                        const estadoConfig = {
+                          vigente: { label: 'Vigente', color: 'text-green-600 bg-green-100', icon: CheckCircle },
+                          por_vencer: { label: 'Por Vencer', color: 'text-yellow-600 bg-yellow-100', icon: Clock },
+                          vencido: { label: 'Vencido', color: 'text-red-600 bg-red-100', icon: XCircle },
+                          sin_registrar: { label: 'Sin Registrar', color: 'text-gray-600 bg-gray-100', icon: AlertTriangle },
+                        };
+                        const config = estadoConfig[estado];
+                        const EstadoIcon = config.icon;
+
+                        const formatFecha = (f: string | null | undefined) => {
+                          if (!f) return '\u2014';
+                          return new Date(f).toLocaleDateString('es-CO', {
+                            year: 'numeric',
+                            month: 'short',
+                            day: 'numeric',
+                          });
+                        };
+
+                        return (
+                          <TableRow key={v.id}>
+                            <TableCell className="text-muted-foreground">{idx + 1}</TableCell>
+                            <TableCell className="font-medium">{v.placa}</TableCell>
+                            <TableCell>{doc?.entidad_emisora || v.lugar_matricula || '\u2014'}</TableCell>
+                            <TableCell>{formatFecha(doc?.fecha_vencimiento)}</TableCell>
+                            <TableCell>{formatFecha(doc?.fecha_emision)}</TableCell>
+                            <TableCell>{doc?.notas || '\u2014'}</TableCell>
+                            <TableCell>
+                              <Badge className={cn('gap-1', config.color)} variant="outline">
+                                <EstadoIcon className="h-3 w-3" />
+                                {config.label}
+                              </Badge>
+                            </TableCell>
+                            <TableCell className="text-right">
+                              <Button
+                                size="sm"
+                                variant="ghost"
+                                onClick={() => handleEditImpuesto(v)}
+                                title={doc ? 'Editar impuesto' : 'Agregar impuesto'}
+                              >
+                                {doc ? (
+                                  <Pencil className="h-4 w-4" />
+                                ) : (
+                                  <Plus className="h-4 w-4" />
+                                )}
+                              </Button>
+                            </TableCell>
+                          </TableRow>
+                        );
+                      })}
+                    </TableBody>
+                  </Table>
+                  <p className="text-xs text-muted-foreground mt-4 italic">
+                    * Los tanques no pagan impuestos. Esta informacion se renueva anualmente.
+                  </p>
+                </>
+              )}
+            </CardContent>
+          </Card>
         </TabsContent>
       </Tabs>
 
@@ -696,6 +887,86 @@ export default function DocumentacionPage() {
                   <Trash2 className="mr-2 h-4 w-4" />
                   Eliminar
                 </>
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Modal para editar/agregar impuesto */}
+      <Dialog open={!!impuestoEditVehiculo} onOpenChange={(open) => !open && setImpuestoEditVehiculo(null)}>
+        <DialogContent className="sm:max-w-[450px]">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Receipt className="h-5 w-5" />
+              Impuesto - {impuestoEditVehiculo?.placa}
+            </DialogTitle>
+            <DialogDescription>
+              {impuestoEditDoc ? 'Editar informacion del impuesto vehicular' : 'Registrar informacion del impuesto vehicular'}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            {impuestoError && (
+              <div className="rounded-md bg-destructive/10 p-3 text-sm text-destructive">
+                {impuestoError}
+              </div>
+            )}
+            <div className="space-y-2">
+              <Label htmlFor="imp-jurisdiccion">Jurisdiccion</Label>
+              <Input
+                id="imp-jurisdiccion"
+                value={impuestoForm.jurisdiccion}
+                onChange={(e) => setImpuestoForm(prev => ({ ...prev, jurisdiccion: e.target.value }))}
+                placeholder="Ej: Floridablanca, Bucaramanga"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="imp-vencimiento">Vencimiento del Plazo para Declarar</Label>
+              <Input
+                id="imp-vencimiento"
+                type="date"
+                value={impuestoForm.vencimientoPlazo}
+                onChange={(e) => setImpuestoForm(prev => ({ ...prev, vencimientoPlazo: e.target.value }))}
+              />
+              <p className="text-xs text-muted-foreground">
+                El sistema te alertara cuando este proximo a vencer
+              </p>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="imp-fecha-pago">Fecha de Pago</Label>
+              <Input
+                id="imp-fecha-pago"
+                type="date"
+                value={impuestoForm.fechaPago}
+                onChange={(e) => setImpuestoForm(prev => ({ ...prev, fechaPago: e.target.value }))}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="imp-mora">Mora</Label>
+              <Input
+                id="imp-mora"
+                value={impuestoForm.mora}
+                onChange={(e) => setImpuestoForm(prev => ({ ...prev, mora: e.target.value }))}
+                placeholder="Ej: Sin mora, $50.000, etc."
+              />
+            </div>
+          </div>
+          <DialogFooter className="pt-2">
+            <Button
+              variant="outline"
+              onClick={() => setImpuestoEditVehiculo(null)}
+              disabled={savingImpuesto}
+            >
+              Cancelar
+            </Button>
+            <Button onClick={handleSaveImpuesto} disabled={savingImpuesto}>
+              {savingImpuesto ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Guardando...
+                </>
+              ) : (
+                'Guardar'
               )}
             </Button>
           </DialogFooter>
