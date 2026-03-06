@@ -59,6 +59,7 @@ export default function VehiculoDetallePage({ params }: PageProps) {
   const [nuevoKilometraje, setNuevoKilometraje] = useState('');
   const [updatingKm, setUpdatingKm] = useState(false);
   const [editModalOpen, setEditModalOpen] = useState(false);
+  const [imagenAmpliada, setImagenAmpliada] = useState(false);
 
   const loadVehiculo = useCallback(async () => {
     setLoading(true);
@@ -172,7 +173,10 @@ export default function VehiculoDetallePage({ params }: PageProps) {
       <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
         <div className="flex items-start gap-4">
           {vehiculo.imagen_url ? (
-            <div className="h-20 w-20 rounded-xl overflow-hidden">
+            <div
+              className="h-20 w-20 rounded-xl overflow-hidden cursor-pointer ring-offset-background transition-opacity hover:opacity-80"
+              onClick={() => setImagenAmpliada(true)}
+            >
               <img
                 src={vehiculo.imagen_url}
                 alt={`${vehiculo.marca} ${vehiculo.modelo}`}
@@ -235,6 +239,19 @@ export default function VehiculoDetallePage({ params }: PageProps) {
           </Link>
         </div>
       </div>
+
+      {/* Modal de imagen ampliada */}
+      {vehiculo.imagen_url && (
+        <Dialog open={imagenAmpliada} onOpenChange={setImagenAmpliada}>
+          <DialogContent className="max-w-3xl p-2" showCloseButton>
+            <img
+              src={vehiculo.imagen_url}
+              alt={`${vehiculo.marca} ${vehiculo.modelo}`}
+              className="w-full h-auto rounded-lg object-contain max-h-[80vh]"
+            />
+          </DialogContent>
+        </Dialog>
+      )}
 
       {/* Modal de edicion */}
       <VehiculoModal
