@@ -171,9 +171,19 @@ export default function VehiculoDetallePage({ params }: PageProps) {
       {/* Header */}
       <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
         <div className="flex items-start gap-4">
-          <div className="flex h-20 w-20 items-center justify-center rounded-xl bg-muted">
-            <Truck className="h-10 w-10 text-muted-foreground" />
-          </div>
+          {vehiculo.imagen_url ? (
+            <div className="h-20 w-20 rounded-xl overflow-hidden">
+              <img
+                src={vehiculo.imagen_url}
+                alt={`${vehiculo.marca} ${vehiculo.modelo}`}
+                className="h-full w-full object-cover"
+              />
+            </div>
+          ) : (
+            <div className="flex h-20 w-20 items-center justify-center rounded-xl bg-muted">
+              <Truck className="h-10 w-10 text-muted-foreground" />
+            </div>
+          )}
           <div>
             <div className="flex items-center gap-3">
               <h1 className="text-2xl font-bold">{vehiculo.placa}</h1>

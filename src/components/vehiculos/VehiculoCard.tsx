@@ -68,8 +68,16 @@ export function VehiculoCard({ vehiculo, onEditar, onEliminar }: VehiculoCardPro
     <Card className="group transition-shadow hover:shadow-md">
       <CardContent className="p-0">
         {/* Header con imagen/placeholder */}
-        <div className="relative h-32 bg-gradient-to-br from-slate-100 to-slate-200 rounded-t-lg flex items-center justify-center">
-          <Truck className="h-16 w-16 text-slate-400" />
+        <div className="relative h-32 bg-gradient-to-br from-slate-100 to-slate-200 rounded-t-lg flex items-center justify-center overflow-hidden">
+          {vehiculo.imagen_url ? (
+            <img
+              src={vehiculo.imagen_url}
+              alt={`${vehiculo.marca} ${vehiculo.modelo}`}
+              className="h-full w-full object-cover"
+            />
+          ) : (
+            <Truck className="h-16 w-16 text-slate-400" />
+          )}
           <div className="absolute top-2 right-2">
             <Badge variant={estado.variant}>{estado.label}</Badge>
           </div>

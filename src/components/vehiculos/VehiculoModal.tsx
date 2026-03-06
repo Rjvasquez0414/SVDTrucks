@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import {
   Dialog,
   DialogContent,
@@ -18,10 +18,11 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { Loader2, Truck, Save } from 'lucide-react';
+import { Loader2, Truck, Save, ImagePlus, X } from 'lucide-react';
 import { createVehiculo, updateVehiculo } from '@/lib/queries/vehiculos';
 import { getConductores } from '@/lib/queries/conductores';
 import { getRemolques } from '@/lib/queries/remolques';
+import { supabase } from '@/lib/supabase';
 import type { VehiculoCompleto, Conductor, Remolque, TipoVehiculo, EstadoVehiculo } from '@/types/database';
 
 interface VehiculoModalProps {
@@ -54,6 +55,13 @@ export function VehiculoModal({
   const [conductorId, setConductorId] = useState<string | null>(null);
   const [remolqueId, setRemolqueId] = useState<string | null>(null);
   const [notas, setNotas] = useState('');
+
+  // Estados de imagen
+  const [imagenFile, setImagenFile] = useState<File | null>(null);
+  const [imagenPreview, setImagenPreview] = useState<string | null>(null);
+  const [imagenActual, setImagenActual] = useState<string | null>(null);
+  const [eliminarImagen, setEliminarImagen] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Estados de carga
   const [isLoading, setIsLoading] = useState(false);
@@ -96,6 +104,8 @@ export function VehiculoModal({
       setConductorId(vehiculo.conductor_id);
       setRemolqueId(vehiculo.remolque_id);
       setNotas(vehiculo.notas || '');
+      setImagenActual(vehiculo.imagen_url || null);
+      setEliminarImagen(false);
     } else {
       resetForm();
     }
@@ -116,12 +126,69 @@ export function VehiculoModal({
     setConductorId(null);
     setRemolqueId(null);
     setNotas('');
+    setImagenFile(null);
+    setImagenPreview(null);
+    setImagenActual(null);
+    setEliminarImagen(false);
     setError(null);
   };
 
   const handleClose = () => {
+    if (imagenPreview) URL.revokeObjectURL(imagenPreview);
     resetForm();
     onOpenChange(false);
+  };
+
+  const handleImagenChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    // Validar tipo
+    if (!file.type.startsWith('image/')) {
+      setError('Solo se permiten archivos de imagen');
+      return;
+    }
+
+    // Validar tamaño (5MB max)
+    if (file.size > 5 * 1024 * 1024) {
+      setError('La imagen no puede pesar mas de 5MB');
+      return;
+    }
+
+    if (imagenPreview) URL.revokeObjectURL(imagenPreview);
+    setImagenFile(file);
+    setImagenPreview(URL.createObjectURL(file));
+    setEliminarImagen(false);
+  };
+
+  const handleQuitarImagen = () => {
+    if (imagenPreview) URL.revokeObjectURL(imagenPreview);
+    setImagenFile(null);
+    setImagenPreview(null);
+    if (imagenActual) setEliminarImagen(true);
+    if (fileInputRef.current) fileInputRef.current.value = '';
+  };
+
+  const subirImagen = async (vehiculoId: string): Promise<string | null> => {
+    if (!imagenFile) return null;
+
+    const fileExt = imagenFile.name.split('.').pop();
+    const fileName = `${vehiculoId}/${Date.now()}.${fileExt}`;
+
+    const { error: uploadError } = await supabase.storage
+      .from('vehiculos')
+      .upload(fileName, imagenFile, { upsert: true });
+
+    if (uploadError) {
+      console.error('Error subiendo imagen:', uploadError);
+      throw new Error('Error al subir la imagen del vehiculo');
+    }
+
+    const { data: urlData } = supabase.storage
+      .from('vehiculos')
+      .getPublicUrl(fileName);
+
+    return urlData.publicUrl;
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -153,7 +220,8 @@ export function VehiculoModal({
     setIsLoading(true);
 
     try {
-      const vehiculoData = {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const vehiculoData: any = {
         placa: placa.toUpperCase().trim(),
         marca: marca.trim(),
         modelo: modelo.trim(),
@@ -171,9 +239,25 @@ export function VehiculoModal({
       };
 
       if (isEditing && vehiculo) {
+        // Subir imagen nueva si hay
+        if (imagenFile) {
+          const url = await subirImagen(vehiculo.id);
+          if (url) vehiculoData.imagen_url = url;
+        } else if (eliminarImagen) {
+          vehiculoData.imagen_url = null;
+        }
+
         await updateVehiculo(vehiculo.id, vehiculoData);
       } else {
-        await createVehiculo(vehiculoData);
+        const nuevoVehiculo = await createVehiculo(vehiculoData);
+
+        // Subir imagen después de crear
+        if (imagenFile && nuevoVehiculo?.id) {
+          const url = await subirImagen(nuevoVehiculo.id);
+          if (url) {
+            await updateVehiculo(nuevoVehiculo.id, { imagen_url: url });
+          }
+        }
       }
 
       handleClose();
@@ -193,6 +277,8 @@ export function VehiculoModal({
       setIsLoading(false);
     }
   };
+
+  const imagenMostrar = imagenPreview || (!eliminarImagen ? imagenActual : null);
 
   return (
     <Dialog open={open} onOpenChange={handleClose}>
@@ -215,6 +301,58 @@ export function VehiculoModal({
                 {error}
               </div>
             )}
+
+            {/* Imagen del vehiculo */}
+            <div className="space-y-2">
+              <Label>Imagen del vehiculo</Label>
+              <div className="flex items-center gap-4">
+                {imagenMostrar ? (
+                  <div className="relative h-24 w-36 rounded-lg overflow-hidden border">
+                    <img
+                      src={imagenMostrar}
+                      alt="Preview"
+                      className="h-full w-full object-cover"
+                    />
+                    <button
+                      type="button"
+                      onClick={handleQuitarImagen}
+                      className="absolute top-1 right-1 h-6 w-6 rounded-full bg-black/60 flex items-center justify-center text-white hover:bg-black/80"
+                    >
+                      <X className="h-3.5 w-3.5" />
+                    </button>
+                  </div>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => fileInputRef.current?.click()}
+                    className="flex h-24 w-36 items-center justify-center rounded-lg border-2 border-dashed border-muted-foreground/25 hover:border-muted-foreground/50 transition-colors"
+                  >
+                    <div className="text-center">
+                      <ImagePlus className="h-8 w-8 mx-auto text-muted-foreground/50" />
+                      <span className="text-xs text-muted-foreground mt-1 block">Subir foto</span>
+                    </div>
+                  </button>
+                )}
+                {imagenMostrar && (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => fileInputRef.current?.click()}
+                  >
+                    Cambiar
+                  </Button>
+                )}
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept="image/*"
+                  className="hidden"
+                  onChange={handleImagenChange}
+                />
+              </div>
+              <p className="text-xs text-muted-foreground">JPG, PNG o WebP. Maximo 5MB.</p>
+            </div>
 
             {/* Informacion basica */}
             <div className="grid gap-4 sm:grid-cols-2">
