@@ -169,11 +169,12 @@ export function VehiculoModal({
     if (fileInputRef.current) fileInputRef.current.value = '';
   };
 
-  const subirImagen = async (vehiculoId: string): Promise<string | null> => {
+  const subirImagen = async (vehiculoId?: string): Promise<string | null> => {
     if (!imagenFile) return null;
 
     const fileExt = imagenFile.name.split('.').pop();
-    const fileName = `${vehiculoId}/${Date.now()}.${fileExt}`;
+    const folder = vehiculoId || `temp-${Date.now()}`;
+    const fileName = `${folder}/${Date.now()}.${fileExt}`;
 
     const { error: uploadError } = await supabase.storage
       .from('vehiculos')
@@ -238,26 +239,18 @@ export function VehiculoModal({
         notas: notas.trim() || null,
       };
 
-      if (isEditing && vehiculo) {
-        // Subir imagen nueva si hay
-        if (imagenFile) {
-          const url = await subirImagen(vehiculo.id);
-          if (url) vehiculoData.imagen_url = url;
-        } else if (eliminarImagen) {
-          vehiculoData.imagen_url = null;
-        }
+      // Subir imagen primero si hay
+      if (imagenFile) {
+        const url = await subirImagen(isEditing ? vehiculo?.id : undefined);
+        if (url) vehiculoData.imagen_url = url;
+      } else if (eliminarImagen) {
+        vehiculoData.imagen_url = null;
+      }
 
+      if (isEditing && vehiculo) {
         await updateVehiculo(vehiculo.id, vehiculoData);
       } else {
-        const nuevoVehiculo = await createVehiculo(vehiculoData);
-
-        // Subir imagen después de crear
-        if (imagenFile && nuevoVehiculo?.id) {
-          const url = await subirImagen(nuevoVehiculo.id);
-          if (url) {
-            await updateVehiculo(nuevoVehiculo.id, { imagen_url: url });
-          }
-        }
+        await createVehiculo(vehiculoData);
       }
 
       handleClose();
