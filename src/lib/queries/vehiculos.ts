@@ -104,6 +104,20 @@ export async function updateVehiculo(id: string, updates: VehiculoUpdate): Promi
   return data as Vehiculo;
 }
 
+// Eliminar un vehiculo
+export async function deleteVehiculo(id: string): Promise<void> {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { error } = await (supabase as any)
+    .from('vehiculos')
+    .delete()
+    .eq('id', id);
+
+  if (error) {
+    console.error('Error deleting vehiculo:', error);
+    throw new Error(error.message);
+  }
+}
+
 // Buscar vehiculos por placa, marca o modelo
 export async function searchVehiculos(query: string): Promise<VehiculoCompleto[]> {
   if (!query || query.trim().length < 2) {

@@ -15,8 +15,26 @@ import {
 } from '@/components/ui/select';
 import { getVehiculos } from '@/lib/queries/vehiculos';
 import { useRefetchOnFocus } from '@/hooks/useRefetchOnFocus';
-import { Plus, Search, LayoutGrid, List, Loader2 } from 'lucide-react';
+import { Plus, Search, LayoutGrid, List, Loader2, MoreVertical, Trash2 } from 'lucide-react';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
 import { EstadoVehiculo, VehiculoCompleto } from '@/types/database';
+import { deleteVehiculo } from '@/lib/queries/vehiculos';
 import { formatNumber } from '@/lib/utils';
 import Link from 'next/link';
 
@@ -31,6 +49,10 @@ export default function VehiculosPage() {
   // Estados para el modal
   const [modalOpen, setModalOpen] = useState(false);
   const [vehiculoEditar, setVehiculoEditar] = useState<VehiculoCompleto | null>(null);
+
+  // Estados para eliminar
+  const [vehiculoEliminar, setVehiculoEliminar] = useState<VehiculoCompleto | null>(null);
+  const [eliminando, setEliminando] = useState(false);
 
   // Obtener lista única de conductores de los vehículos
   const conductoresUnicos = vehiculos
@@ -71,6 +93,21 @@ export default function VehiculosPage() {
 
   const handleModalSuccess = () => {
     loadVehiculos();
+  };
+
+  const handleEliminar = async () => {
+    if (!vehiculoEliminar) return;
+    setEliminando(true);
+    try {
+      await deleteVehiculo(vehiculoEliminar.id);
+      setVehiculoEliminar(null);
+      loadVehiculos();
+    } catch (err) {
+      console.error('Error eliminando vehiculo:', err);
+      alert('Error al eliminar el vehiculo. Puede tener mantenimientos o documentos asociados.');
+    } finally {
+      setEliminando(false);
+    }
   };
 
   const vehiculosFiltrados = vehiculos.filter((v) => {
@@ -190,6 +227,7 @@ export default function VehiculosPage() {
               key={vehiculo.id}
               vehiculo={vehiculo}
               onEditar={handleEditarVehiculo}
+              onEliminar={loadVehiculos}
             />
           ))}
         </div>
@@ -228,11 +266,54 @@ export default function VehiculosPage() {
                 <Button variant="outline" size="sm" asChild>
                   <Link href={`/vehiculos/${vehiculo.id}`}>Ver</Link>
                 </Button>
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button variant="ghost" size="icon" className="h-8 w-8">
+                      <MoreVertical className="h-4 w-4" />
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end">
+                    <DropdownMenuItem onClick={() => handleEditarVehiculo(vehiculo)}>
+                      Editar
+                    </DropdownMenuItem>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuItem
+                      className="text-destructive focus:text-destructive"
+                      onClick={() => setVehiculoEliminar(vehiculo)}
+                    >
+                      <Trash2 className="h-4 w-4 mr-2" />
+                      Eliminar
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
               </div>
             </div>
           ))}
         </div>
       )}
+
+      {/* Dialog de confirmacion para eliminar (vista lista) */}
+      <AlertDialog open={!!vehiculoEliminar} onOpenChange={(open) => !open && setVehiculoEliminar(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Eliminar vehiculo {vehiculoEliminar?.placa}</AlertDialogTitle>
+            <AlertDialogDescription>
+              Esta accion no se puede deshacer. Se eliminara permanentemente el vehiculo
+              {' '}<strong>{vehiculoEliminar?.placa}</strong> ({vehiculoEliminar?.marca} {vehiculoEliminar?.modelo}) del sistema.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={eliminando}>Cancelar</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleEliminar}
+              disabled={eliminando}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              {eliminando ? 'Eliminando...' : 'Eliminar'}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       {/* Empty state */}
       {!loading && vehiculosFiltrados.length === 0 && (

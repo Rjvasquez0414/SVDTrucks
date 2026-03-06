@@ -1,22 +1,36 @@
 'use client';
 
+import { useState } from 'react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Truck, Calendar, Gauge, Eye, MoreVertical, User } from 'lucide-react';
+import { Truck, Calendar, Gauge, Eye, MoreVertical, User, Trash2 } from 'lucide-react';
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
 import { VehiculoCompleto, EstadoVehiculo } from '@/types/database';
+import { deleteVehiculo } from '@/lib/queries/vehiculos';
 import { formatNumber } from '@/lib/utils';
 import Link from 'next/link';
 
 interface VehiculoCardProps {
   vehiculo: VehiculoCompleto;
   onEditar?: (vehiculo: VehiculoCompleto) => void;
+  onEliminar?: () => void;
 }
 
 const estadoBadge: Record<EstadoVehiculo, { label: string; variant: 'default' | 'secondary' | 'destructive' | 'outline' }> = {
@@ -31,8 +45,24 @@ const tipoLabel: Record<string, string> = {
   volqueta: 'Volqueta',
 };
 
-export function VehiculoCard({ vehiculo, onEditar }: VehiculoCardProps) {
+export function VehiculoCard({ vehiculo, onEditar, onEliminar }: VehiculoCardProps) {
   const estado = estadoBadge[vehiculo.estado];
+  const [confirmOpen, setConfirmOpen] = useState(false);
+  const [eliminando, setEliminando] = useState(false);
+
+  const handleEliminar = async () => {
+    setEliminando(true);
+    try {
+      await deleteVehiculo(vehiculo.id);
+      setConfirmOpen(false);
+      onEliminar?.();
+    } catch (err) {
+      console.error('Error eliminando vehiculo:', err);
+      alert('Error al eliminar el vehiculo. Puede tener mantenimientos o documentos asociados.');
+    } finally {
+      setEliminando(false);
+    }
+  };
 
   return (
     <Card className="group transition-shadow hover:shadow-md">
@@ -81,6 +111,14 @@ export function VehiculoCard({ vehiculo, onEditar }: VehiculoCardProps) {
                     Registrar mantenimiento
                   </Link>
                 </DropdownMenuItem>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem
+                  className="text-destructive focus:text-destructive"
+                  onClick={() => setConfirmOpen(true)}
+                >
+                  <Trash2 className="h-4 w-4 mr-2" />
+                  Eliminar
+                </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
           </div>
@@ -114,6 +152,27 @@ export function VehiculoCard({ vehiculo, onEditar }: VehiculoCardProps) {
           </div>
         </div>
       </CardContent>
+      <AlertDialog open={confirmOpen} onOpenChange={setConfirmOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Eliminar vehiculo {vehiculo.placa}</AlertDialogTitle>
+            <AlertDialogDescription>
+              Esta accion no se puede deshacer. Se eliminara permanentemente el vehiculo
+              {' '}<strong>{vehiculo.placa}</strong> ({vehiculo.marca} {vehiculo.modelo}) del sistema.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={eliminando}>Cancelar</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleEliminar}
+              disabled={eliminando}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              {eliminando ? 'Eliminando...' : 'Eliminar'}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </Card>
   );
 }
