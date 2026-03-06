@@ -40,11 +40,11 @@ export default function LoginPage() {
       <div className="w-full max-w-md">
         {/* Logo y titulo */}
         <div className="text-center mb-8">
-          <div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-primary mb-4">
-            <Truck className="h-8 w-8 text-primary-foreground" />
+          <div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-azutrans-yellow mb-4 shadow-lg shadow-azutrans-yellow/20">
+            <Truck className="h-8 w-8 text-azutrans-dark" />
           </div>
-          <h1 className="text-2xl font-bold text-slate-900">EAM DIONE</h1>
-          <p className="text-slate-600 mt-1">Sistema de Gestion de Flotas</p>
+          <h1 className="text-2xl font-bold text-slate-900">AZUTRANS</h1>
+          <p className="text-slate-600 mt-1 text-xs tracking-widest uppercase">EAM DIONE - Gestion de Flotas</p>
         </div>
 
         {/* Card de login */}
@@ -132,7 +132,7 @@ export default function LoginPage() {
 
         {/* Footer */}
         <p className="text-center text-xs text-muted-foreground mt-6">
-          EAM DIONE - Sistema de Gestion de Flotas
+          AZUTRANS - EAM DIONE
         </p>
       </div>
     </div>

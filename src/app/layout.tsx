@@ -14,8 +14,8 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "EAM DIONE - Sistema de Gestion de Flotas",
-  description: "Sistema de control de mantenimiento preventivo y correctivo para flotas de camiones",
+  title: "AZUTRANS - EAM DIONE",
+  description: "AZUTRANS - Sistema de control de mantenimiento preventivo y correctivo para flotas de camiones",
 };
 
 export default function RootLayout({

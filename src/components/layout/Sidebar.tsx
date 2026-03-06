@@ -63,16 +63,19 @@ export function Sidebar() {
       {/* Logo */}
       <div className="flex h-16 items-center justify-between border-b border-border px-4">
         {!collapsed && (
-          <Link href="/" className="flex items-center gap-2">
-            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary">
-              <Truck className="h-5 w-5 text-primary-foreground" />
+          <Link href="/" className="flex items-center gap-3">
+            <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-azutrans-yellow">
+              <Truck className="h-5 w-5 text-azutrans-dark" />
             </div>
-            <span className="text-lg font-semibold">EAM DIONE</span>
+            <div className="flex flex-col">
+              <span className="text-sm font-bold tracking-wide text-foreground">AZUTRANS</span>
+              <span className="text-[10px] text-muted-foreground tracking-widest">EAM DIONE</span>
+            </div>
           </Link>
         )}
         {collapsed && (
-          <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary mx-auto">
-            <Truck className="h-5 w-5 text-primary-foreground" />
+          <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-azutrans-yellow mx-auto">
+            <Truck className="h-5 w-5 text-azutrans-dark" />
           </div>
         )}
       </div>

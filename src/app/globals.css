@@ -41,6 +41,8 @@
   --radius-md: calc(var(--radius) - 2px);
   --radius-lg: var(--radius);
   --radius-xl: calc(var(--radius) + 4px);
+  --color-azutrans-yellow: oklch(0.925 0.194 101.5);
+  --color-azutrans-dark: oklch(0.18 0 0);
 }
 
 :root {
