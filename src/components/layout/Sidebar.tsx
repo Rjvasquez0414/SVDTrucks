@@ -56,29 +56,32 @@ export function Sidebar() {
   return (
     <aside
       className={cn(
-        'fixed left-0 top-0 z-40 h-screen border-r border-border bg-card transition-all duration-300',
+        'fixed left-0 top-0 z-40 h-screen bg-sidebar border-r border-sidebar-border transition-all duration-300',
         collapsed ? 'w-16' : 'w-64'
       )}
     >
       {/* Logo */}
-      <div className="flex h-16 items-center justify-between border-b border-border px-4">
+      <div className="flex h-16 items-center justify-between border-b border-sidebar-border px-4">
         {!collapsed && (
-          <Link href="/" className="flex items-center gap-2">
-            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary">
-              <Truck className="h-5 w-5 text-primary-foreground" />
+          <Link href="/" className="flex items-center gap-3">
+            <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-sidebar-primary">
+              <Truck className="h-5 w-5 text-sidebar-primary-foreground" />
             </div>
-            <span className="text-lg font-semibold">EAM DIONE</span>
+            <div className="flex flex-col">
+              <span className="text-sm font-bold tracking-wide text-sidebar-primary">AZUTRANS</span>
+              <span className="text-[10px] text-sidebar-foreground/60 tracking-widest">EAM DIONE</span>
+            </div>
           </Link>
         )}
         {collapsed && (
-          <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary mx-auto">
-            <Truck className="h-5 w-5 text-primary-foreground" />
+          <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-sidebar-primary mx-auto">
+            <Truck className="h-5 w-5 text-sidebar-primary-foreground" />
           </div>
         )}
       </div>
 
       {/* Navigation */}
-      <nav className="flex flex-col gap-1 p-3">
+      <nav className="flex flex-col gap-1 p-3 mt-2">
         {menuItems.map((item) => {
           const isActive = pathname === item.href ||
             (item.href !== '/' && pathname.startsWith(item.href));
@@ -90,8 +93,8 @@ export function Sidebar() {
               className={cn(
                 'flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors',
                 isActive
-                  ? 'bg-primary text-primary-foreground'
-                  : 'text-muted-foreground hover:bg-muted hover:text-foreground',
+                  ? 'bg-sidebar-primary text-sidebar-primary-foreground shadow-sm'
+                  : 'text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground',
                 collapsed && 'justify-center px-2'
               )}
               title={collapsed ? item.title : undefined}
@@ -110,7 +113,7 @@ export function Sidebar() {
           size="sm"
           onClick={toggle}
           className={cn(
-            'w-full justify-center',
+            'w-full justify-center text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground',
             !collapsed && 'justify-start'
           )}
         >

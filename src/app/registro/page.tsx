@@ -60,30 +60,30 @@ export default function RegistroPage() {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-100 to-slate-200 p-4">
+    <div className="min-h-screen flex items-center justify-center bg-azutrans-black p-4">
       <div className="w-full max-w-md">
         {/* Logo y titulo */}
         <div className="text-center mb-8">
-          <div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-primary mb-4">
-            <Truck className="h-8 w-8 text-primary-foreground" />
+          <div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-azutrans-yellow mb-4 shadow-lg shadow-azutrans-yellow/20">
+            <Truck className="h-8 w-8 text-azutrans-black" />
           </div>
-          <h1 className="text-2xl font-bold text-slate-900">EAM DIONE</h1>
-          <p className="text-slate-600 mt-1">Sistema de Gestion de Flotas</p>
+          <h1 className="text-2xl font-bold text-azutrans-yellow tracking-wide">AZUTRANS</h1>
+          <p className="text-white/50 mt-1 text-xs tracking-widest uppercase">EAM DIONE - Gestion de Flotas</p>
         </div>
 
         {/* Card de registro */}
-        <Card className="shadow-xl border-0">
+        <Card className="shadow-2xl border-white/10 bg-white/5 backdrop-blur">
           <CardHeader className="space-y-1 pb-4">
-            <CardTitle className="text-xl text-center">Crear Cuenta</CardTitle>
+            <CardTitle className="text-xl text-center text-white">Crear Cuenta</CardTitle>
           </CardHeader>
           <CardContent>
             {success ? (
               <div className="text-center py-4">
-                <div className="inline-flex items-center justify-center w-12 h-12 rounded-full bg-green-100 mb-4">
-                  <CheckCircle2 className="h-6 w-6 text-green-600" />
+                <div className="inline-flex items-center justify-center w-12 h-12 rounded-full bg-green-500/20 mb-4">
+                  <CheckCircle2 className="h-6 w-6 text-green-400" />
                 </div>
-                <h3 className="font-medium text-lg mb-2">Registro exitoso</h3>
-                <p className="text-sm text-muted-foreground">
+                <h3 className="font-medium text-lg mb-2 text-white">Registro exitoso</h3>
+                <p className="text-sm text-white/50">
                   Redirigiendo al sistema...
                 </p>
               </div>
@@ -91,7 +91,7 @@ export default function RegistroPage() {
               <form onSubmit={handleSubmit} className="space-y-4">
                 {/* Error message */}
                 {error && (
-                  <div className="flex items-center gap-2 p-3 rounded-lg bg-red-50 text-red-700 text-sm">
+                  <div className="flex items-center gap-2 p-3 rounded-lg bg-red-500/10 text-red-400 text-sm border border-red-500/20">
                     <AlertCircle className="h-4 w-4 shrink-0" />
                     <span>{error}</span>
                   </div>
@@ -99,7 +99,7 @@ export default function RegistroPage() {
 
                 {/* Nombre */}
                 <div className="space-y-2">
-                  <Label htmlFor="nombre">Nombre Completo</Label>
+                  <Label htmlFor="nombre" className="text-white/70">Nombre Completo</Label>
                   <Input
                     id="nombre"
                     type="text"
@@ -109,12 +109,13 @@ export default function RegistroPage() {
                     required
                     disabled={isLoading}
                     autoComplete="name"
+                    className="bg-white/10 border-white/15 text-white placeholder:text-white/30 focus:border-azutrans-yellow focus-visible:ring-azutrans-yellow/30"
                   />
                 </div>
 
                 {/* Email */}
                 <div className="space-y-2">
-                  <Label htmlFor="email">Correo Electronico</Label>
+                  <Label htmlFor="email" className="text-white/70">Correo Electronico</Label>
                   <Input
                     id="email"
                     type="email"
@@ -124,12 +125,13 @@ export default function RegistroPage() {
                     required
                     disabled={isLoading}
                     autoComplete="email"
+                    className="bg-white/10 border-white/15 text-white placeholder:text-white/30 focus:border-azutrans-yellow focus-visible:ring-azutrans-yellow/30"
                   />
                 </div>
 
                 {/* Password */}
                 <div className="space-y-2">
-                  <Label htmlFor="password">Contrasena</Label>
+                  <Label htmlFor="password" className="text-white/70">Contrasena</Label>
                   <div className="relative">
                     <Input
                       id="password"
@@ -140,12 +142,12 @@ export default function RegistroPage() {
                       required
                       disabled={isLoading}
                       autoComplete="new-password"
-                      className="pr-10"
+                      className="pr-10 bg-white/10 border-white/15 text-white placeholder:text-white/30 focus:border-azutrans-yellow focus-visible:ring-azutrans-yellow/30"
                     />
                     <button
                       type="button"
                       onClick={() => setShowPassword(!showPassword)}
-                      className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-white/40 hover:text-white/70"
                       tabIndex={-1}
                     >
                       {showPassword ? (
@@ -159,7 +161,7 @@ export default function RegistroPage() {
 
                 {/* Confirm Password */}
                 <div className="space-y-2">
-                  <Label htmlFor="confirmPassword">Confirmar Contrasena</Label>
+                  <Label htmlFor="confirmPassword" className="text-white/70">Confirmar Contrasena</Label>
                   <Input
                     id="confirmPassword"
                     type={showPassword ? 'text' : 'password'}
@@ -169,11 +171,12 @@ export default function RegistroPage() {
                     required
                     disabled={isLoading}
                     autoComplete="new-password"
+                    className="bg-white/10 border-white/15 text-white placeholder:text-white/30 focus:border-azutrans-yellow focus-visible:ring-azutrans-yellow/30"
                   />
                 </div>
 
                 {/* Submit button */}
-                <Button type="submit" className="w-full" disabled={isLoading}>
+                <Button type="submit" className="w-full bg-azutrans-yellow text-azutrans-black hover:bg-azutrans-yellow/90 font-semibold" disabled={isLoading}>
                   {isLoading ? (
                     <>
                       <Loader2 className="h-4 w-4 mr-2 animate-spin" />
@@ -185,9 +188,9 @@ export default function RegistroPage() {
                 </Button>
 
                 {/* Link a login */}
-                <p className="text-center text-sm text-muted-foreground">
+                <p className="text-center text-sm text-white/40">
                   Ya tienes cuenta?{' '}
-                  <Link href="/login" className="text-primary hover:underline font-medium">
+                  <Link href="/login" className="text-azutrans-yellow hover:underline font-medium">
                     Inicia sesion
                   </Link>
                 </p>
@@ -197,8 +200,8 @@ export default function RegistroPage() {
         </Card>
 
         {/* Footer */}
-        <p className="text-center text-xs text-muted-foreground mt-6">
-          EAM DIONE - Sistema de Gestion de Flotas
+        <p className="text-center text-xs text-white/30 mt-6">
+          AZUTRANS - EAM DIONE - Sistema de Gestion de Flotas
         </p>
       </div>
     </div>

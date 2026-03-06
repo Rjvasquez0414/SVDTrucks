@@ -36,27 +36,27 @@ export default function LoginPage() {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-100 to-slate-200 p-4">
+    <div className="min-h-screen flex items-center justify-center bg-azutrans-black p-4">
       <div className="w-full max-w-md">
         {/* Logo y titulo */}
         <div className="text-center mb-8">
-          <div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-primary mb-4">
-            <Truck className="h-8 w-8 text-primary-foreground" />
+          <div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-azutrans-yellow mb-4 shadow-lg shadow-azutrans-yellow/20">
+            <Truck className="h-8 w-8 text-azutrans-black" />
           </div>
-          <h1 className="text-2xl font-bold text-slate-900">EAM DIONE</h1>
-          <p className="text-slate-600 mt-1">Sistema de Gestion de Flotas</p>
+          <h1 className="text-2xl font-bold text-azutrans-yellow tracking-wide">AZUTRANS</h1>
+          <p className="text-white/50 mt-1 text-xs tracking-widest uppercase">EAM DIONE - Gestion de Flotas</p>
         </div>
 
         {/* Card de login */}
-        <Card className="shadow-xl border-0">
+        <Card className="shadow-2xl border-white/10 bg-white/5 backdrop-blur">
           <CardHeader className="space-y-1 pb-4">
-            <CardTitle className="text-xl text-center">Iniciar Sesion</CardTitle>
+            <CardTitle className="text-xl text-center text-white">Iniciar Sesion</CardTitle>
           </CardHeader>
           <CardContent>
             <form onSubmit={handleSubmit} className="space-y-4">
               {/* Error message */}
               {error && (
-                <div className="flex items-center gap-2 p-3 rounded-lg bg-red-50 text-red-700 text-sm">
+                <div className="flex items-center gap-2 p-3 rounded-lg bg-red-500/10 text-red-400 text-sm border border-red-500/20">
                   <AlertCircle className="h-4 w-4 shrink-0" />
                   <span>{error}</span>
                 </div>
@@ -64,7 +64,7 @@ export default function LoginPage() {
 
               {/* Email */}
               <div className="space-y-2">
-                <Label htmlFor="email">Correo Electronico</Label>
+                <Label htmlFor="email" className="text-white/70">Correo Electronico</Label>
                 <Input
                   id="email"
                   type="email"
@@ -74,12 +74,13 @@ export default function LoginPage() {
                   required
                   disabled={isLoading}
                   autoComplete="email"
+                  className="bg-white/10 border-white/15 text-white placeholder:text-white/30 focus:border-azutrans-yellow focus-visible:ring-azutrans-yellow/30"
                 />
               </div>
 
               {/* Password */}
               <div className="space-y-2">
-                <Label htmlFor="password">Contrasena</Label>
+                <Label htmlFor="password" className="text-white/70">Contrasena</Label>
                 <div className="relative">
                   <Input
                     id="password"
@@ -90,12 +91,12 @@ export default function LoginPage() {
                     required
                     disabled={isLoading}
                     autoComplete="current-password"
-                    className="pr-10"
+                    className="pr-10 bg-white/10 border-white/15 text-white placeholder:text-white/30 focus:border-azutrans-yellow focus-visible:ring-azutrans-yellow/30"
                   />
                   <button
                     type="button"
                     onClick={() => setShowPassword(!showPassword)}
-                    className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-white/40 hover:text-white/70"
                     tabIndex={-1}
                   >
                     {showPassword ? (
@@ -108,7 +109,7 @@ export default function LoginPage() {
               </div>
 
               {/* Submit button */}
-              <Button type="submit" className="w-full" disabled={isLoading}>
+              <Button type="submit" className="w-full bg-azutrans-yellow text-azutrans-black hover:bg-azutrans-yellow/90 font-semibold" disabled={isLoading}>
                 {isLoading ? (
                   <>
                     <Loader2 className="h-4 w-4 mr-2 animate-spin" />
@@ -120,9 +121,9 @@ export default function LoginPage() {
               </Button>
 
               {/* Link a registro */}
-              <p className="text-center text-sm text-muted-foreground">
+              <p className="text-center text-sm text-white/40">
                 No tienes cuenta?{' '}
-                <Link href="/registro" className="text-primary hover:underline font-medium">
+                <Link href="/registro" className="text-azutrans-yellow hover:underline font-medium">
                   Registrate aqui
                 </Link>
               </p>
@@ -131,8 +132,8 @@ export default function LoginPage() {
         </Card>
 
         {/* Footer */}
-        <p className="text-center text-xs text-muted-foreground mt-6">
-          EAM DIONE - Sistema de Gestion de Flotas
+        <p className="text-center text-xs text-white/30 mt-6">
+          AZUTRANS - EAM DIONE - Sistema de Gestion de Flotas
         </p>
       </div>
     </div>
