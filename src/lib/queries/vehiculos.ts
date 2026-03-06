@@ -93,15 +93,18 @@ export async function updateVehiculo(id: string, updates: VehiculoUpdate): Promi
     .from('vehiculos')
     .update({ ...updates, updated_at: new Date().toISOString() })
     .eq('id', id)
-    .select()
-    .single();
+    .select();
 
   if (error) {
     console.error('Error updating vehiculo:', error);
     throw new Error(error.message);
   }
 
-  return data as Vehiculo;
+  if (!data || data.length === 0) {
+    throw new Error('No tienes permisos para editar vehiculos. Contacta al administrador.');
+  }
+
+  return data[0] as Vehiculo;
 }
 
 // Eliminar un vehiculo
