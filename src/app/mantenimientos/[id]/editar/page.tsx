@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { MainLayout } from '@/components/layout/MainLayout';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -23,7 +23,10 @@ import {
   calcularProximaFecha,
 } from '@/data/tipos-mantenimiento';
 import {
-  createMantenimiento,
+  getMantenimientoById,
+  getRepuestosByMantenimiento,
+  updateMantenimiento,
+  deleteRepuestosByMantenimiento,
   createRepuestos,
   actualizarKilometrajeVehiculo,
 } from '@/lib/queries/mantenimientos';
@@ -32,36 +35,46 @@ import { formatNumber } from '@/lib/utils';
 import { supabase } from '@/lib/supabase';
 import Link from 'next/link';
 import Image from 'next/image';
-import { useRouter, useSearchParams } from 'next/navigation';
+import { useRouter, useParams } from 'next/navigation';
 import { useAuth } from '@/lib/auth-context';
 import type { VehiculoCompleto, CategoriaMantenimiento, TipoMantenimiento } from '@/types/database';
 
-interface Repuesto {
+interface RepuestoForm {
   nombre: string;
   cantidad: number;
   costoTotal: number | string;
 }
 
-export default function NuevoMantenimientoPage() {
+// Archivo que puede ser nuevo (File) o existente (URL string)
+interface ArchivoEvidencia {
+  tipo: 'nuevo' | 'existente';
+  file?: File;
+  url: string;
+  esPdf: boolean;
+  nombre: string;
+}
+
+function esPdfUrl(url: string): boolean {
+  return url.toLowerCase().endsWith('.pdf');
+}
+
+export default function EditarMantenimientoPage() {
   const router = useRouter();
-  const searchParams = useSearchParams();
+  const params = useParams();
+  const mantenimientoId = params.id as string;
   const { usuario } = useAuth();
 
-  // Obtener vehiculo de la URL si existe
-  const vehiculoIdFromUrl = searchParams.get('vehiculo');
-
   // Estados del formulario
-  const [vehiculoId, setVehiculoId] = useState(vehiculoIdFromUrl || '');
+  const [vehiculoId, setVehiculoId] = useState('');
   const [tipo, setTipo] = useState<TipoMantenimiento>('preventivo');
   const [categoria, setCategoria] = useState<CategoriaMantenimiento | ''>('');
   const [descripcion, setDescripcion] = useState('');
-  const [fecha, setFecha] = useState(new Date().toISOString().split('T')[0]);
+  const [fecha, setFecha] = useState('');
   const [kilometraje, setKilometraje] = useState('');
   const [proveedor, setProveedor] = useState('');
   const [observaciones, setObservaciones] = useState('');
-  const [repuestos, setRepuestos] = useState<Repuesto[]>([]);
-  const [imagenes, setImagenes] = useState<File[]>([]);
-  const [imagenesPreview, setImagenesPreview] = useState<string[]>([]);
+  const [repuestos, setRepuestos] = useState<RepuestoForm[]>([]);
+  const [archivos, setArchivos] = useState<ArchivoEvidencia[]>([]);
 
   // Estados de carga
   const [vehiculos, setVehiculos] = useState<VehiculoCompleto[]>([]);
@@ -69,35 +82,69 @@ export default function NuevoMantenimientoPage() {
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // Cargar vehiculos al inicio
-  useEffect(() => {
-    async function loadVehiculos() {
-      const data = await getVehiculos();
-      setVehiculos(data);
+  const loadData = useCallback(async () => {
+    try {
+      const [mantenimiento, repuestosData, vehsData] = await Promise.all([
+        getMantenimientoById(mantenimientoId),
+        getRepuestosByMantenimiento(mantenimientoId),
+        getVehiculos(),
+      ]);
+
+      if (!mantenimiento) {
+        setError('Mantenimiento no encontrado');
+        setLoading(false);
+        return;
+      }
+
+      setVehiculos(vehsData);
+      setVehiculoId(mantenimiento.vehiculo_id);
+      setTipo(mantenimiento.tipo);
+      setCategoria(mantenimiento.categoria);
+      setDescripcion(mantenimiento.descripcion);
+      setFecha(mantenimiento.fecha);
+      setKilometraje(mantenimiento.kilometraje.toString());
+      setProveedor(mantenimiento.proveedor || '');
+      setObservaciones(mantenimiento.observaciones || '');
+
+      // Cargar repuestos existentes
+      if (repuestosData.length > 0) {
+        setRepuestos(
+          repuestosData.map((r) => ({
+            nombre: r.nombre,
+            cantidad: r.cantidad,
+            costoTotal: r.costo_unitario * r.cantidad,
+          }))
+        );
+      }
+
+      // Cargar archivos existentes (imagenes y PDFs)
+      if (mantenimiento.imagenes && mantenimiento.imagenes.length > 0) {
+        setArchivos(
+          mantenimiento.imagenes.map((url) => ({
+            tipo: 'existente' as const,
+            url,
+            esPdf: esPdfUrl(url),
+            nombre: url.split('/').pop() || 'archivo',
+          }))
+        );
+      }
+    } catch (err) {
+      console.error('Error cargando mantenimiento:', err);
+      setError('Error al cargar el mantenimiento');
+    } finally {
       setLoading(false);
     }
-    loadVehiculos();
-  }, []);
+  }, [mantenimientoId]);
+
+  useEffect(() => {
+    loadData();
+  }, [loadData]);
 
   const vehiculoSeleccionado = vehiculos.find((v) => v.id === vehiculoId);
   const categoriasFiltradas = catalogoMantenimiento.filter((c) => c.tipo === tipo);
   const categoriaInfo = categoria ? getCategoriaInfo(categoria) : null;
 
-  // Auto-rellenar descripcion cuando se selecciona categoria (excepto "otro")
-  useEffect(() => {
-    if (categoriaInfo && !descripcion && categoria !== 'otro') {
-      setDescripcion(categoriaInfo.descripcion);
-    }
-  }, [categoriaInfo, descripcion, categoria]);
-
-  // Auto-rellenar kilometraje con el actual del vehiculo
-  useEffect(() => {
-    if (vehiculoSeleccionado && !kilometraje) {
-      setKilometraje(vehiculoSeleccionado.kilometraje.toString());
-    }
-  }, [vehiculoSeleccionado, kilometraje]);
-
-  // Agregar insumos tipicos como repuestos
+  // Repuestos
   const agregarInsumosTipicos = () => {
     if (categoriaInfo?.insumosTipicos) {
       const nuevosRepuestos = categoriaInfo.insumosTipicos.map((insumo) => ({
@@ -110,10 +157,10 @@ export default function NuevoMantenimientoPage() {
   };
 
   const agregarRepuesto = () => {
-    setRepuestos([...repuestos, { nombre: '', cantidad: 1, costoTotal: '' }]);
+    setRepuestos([...repuestos, { nombre: '', cantidad: 1, costoTotal: 0 }]);
   };
 
-  const actualizarRepuesto = (index: number, field: keyof Repuesto, value: string | number) => {
+  const actualizarRepuesto = (index: number, field: keyof RepuestoForm, value: string | number) => {
     const nuevosRepuestos = [...repuestos];
     nuevosRepuestos[index] = { ...nuevosRepuestos[index], [field]: value };
     setRepuestos(nuevosRepuestos);
@@ -123,51 +170,56 @@ export default function NuevoMantenimientoPage() {
     setRepuestos(repuestos.filter((_, i) => i !== index));
   };
 
-  const costoRepuestos = repuestos.reduce(
-    (sum, r) => sum + (Number(r.costoTotal) || 0),
-    0
-  );
+  const costoRepuestos = repuestos.reduce((sum, r) => sum + (Number(r.costoTotal) || 0), 0);
 
-  // Funciones para manejo de archivos (imagenes + PDFs)
-  const agregarImagenes = (e: React.ChangeEvent<HTMLInputElement>) => {
+  // Archivos (imagenes + PDFs)
+  const agregarArchivos = (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = Array.from(e.target.files || []);
     if (files.length === 0) return;
 
-    // Limitar a 5 archivos maximo
-    const nuevasImagenes = [...imagenes, ...files].slice(0, 5);
-    setImagenes(nuevasImagenes);
+    const nuevosArchivos: ArchivoEvidencia[] = files.map((file) => ({
+      tipo: 'nuevo' as const,
+      file,
+      url: file.type === 'application/pdf' ? '' : URL.createObjectURL(file),
+      esPdf: file.type === 'application/pdf',
+      nombre: file.name,
+    }));
 
-    // Crear previews (solo para imagenes, no PDFs)
-    // Limpiar previews anteriores
-    imagenesPreview.forEach((url) => { if (url) URL.revokeObjectURL(url); });
-    const previews = nuevasImagenes.map((file) =>
-      file.type === 'application/pdf' ? '' : URL.createObjectURL(file)
-    );
-    setImagenesPreview(previews);
+    const totalArchivos = [...archivos, ...nuevosArchivos].slice(0, 5);
+    setArchivos(totalArchivos);
 
     // Reset input
     e.target.value = '';
   };
 
-  const eliminarImagen = (index: number) => {
-    if (imagenesPreview[index]) URL.revokeObjectURL(imagenesPreview[index]);
-    setImagenes(imagenes.filter((_, i) => i !== index));
-    setImagenesPreview(imagenesPreview.filter((_, i) => i !== index));
+  const eliminarArchivo = (index: number) => {
+    const archivo = archivos[index];
+    if (archivo.tipo === 'nuevo' && !archivo.esPdf) {
+      URL.revokeObjectURL(archivo.url);
+    }
+    setArchivos(archivos.filter((_, i) => i !== index));
   };
 
-  const subirImagenes = async (mantenimientoId: string): Promise<string[]> => {
+  const subirArchivos = async (): Promise<string[]> => {
     const urls: string[] = [];
 
-    for (const file of imagenes) {
-      const fileExt = file.name.split('.').pop();
+    for (const archivo of archivos) {
+      if (archivo.tipo === 'existente') {
+        urls.push(archivo.url);
+        continue;
+      }
+
+      if (!archivo.file) continue;
+
+      const fileExt = archivo.file.name.split('.').pop();
       const fileName = `${mantenimientoId}/${Date.now()}-${Math.random().toString(36).substring(7)}.${fileExt}`;
 
       const { error } = await supabase.storage
         .from('mantenimientos')
-        .upload(fileName, file);
+        .upload(fileName, archivo.file);
 
       if (error) {
-        console.error('Error subiendo imagen:', error);
+        console.error('Error subiendo archivo:', error);
         continue;
       }
 
@@ -194,13 +246,14 @@ export default function NuevoMantenimientoPage() {
 
     try {
       const kmActual = parseInt(kilometraje);
-
-      // Calcular proximo mantenimiento
       const proximoKm = calcularProximoKm(categoria, kmActual);
       const proximaFecha = calcularProximaFecha(categoria, fecha);
 
-      // Crear el mantenimiento
-      const mantenimiento = await createMantenimiento({
+      // Subir archivos nuevos y mantener existentes
+      const imageUrls = await subirArchivos();
+
+      // Actualizar mantenimiento
+      await updateMantenimiento(mantenimientoId, {
         vehiculo_id: vehiculoId,
         tipo,
         categoria,
@@ -212,32 +265,16 @@ export default function NuevoMantenimientoPage() {
         observaciones: observaciones || null,
         proximo_km: proximoKm,
         proxima_fecha: proximaFecha?.toISOString().split('T')[0] || null,
-        created_by: usuario?.id || null,
+        imagenes: imageUrls,
       });
 
-      if (!mantenimiento) {
-        throw new Error('Error al crear el mantenimiento');
-      }
-
-      // Subir imagenes si hay
-      if (imagenes.length > 0) {
-        const imageUrls = await subirImagenes(mantenimiento.id);
-        if (imageUrls.length > 0) {
-          // Actualizar el mantenimiento con las URLs de imagenes
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          await (supabase as any)
-            .from('mantenimientos')
-            .update({ imagenes: imageUrls })
-            .eq('id', mantenimiento.id);
-        }
-      }
-
-      // Crear repuestos si hay
+      // Reemplazar repuestos: eliminar todos y recrear
+      await deleteRepuestosByMantenimiento(mantenimientoId);
       if (repuestos.length > 0) {
         const repuestosData = repuestos
           .filter((r) => r.nombre.trim())
           .map((r) => ({
-            mantenimiento_id: mantenimiento.id,
+            mantenimiento_id: mantenimientoId,
             nombre: r.nombre,
             cantidad: r.cantidad,
             costo_unitario: r.cantidad > 0 ? Math.round((Number(r.costoTotal) || 0) / r.cantidad) : (Number(r.costoTotal) || 0),
@@ -256,7 +293,7 @@ export default function NuevoMantenimientoPage() {
       router.push('/mantenimientos');
     } catch (err) {
       console.error('Error:', err);
-      setError(err instanceof Error ? err.message : 'Error al guardar el mantenimiento');
+      setError(err instanceof Error ? err.message : 'Error al actualizar el mantenimiento');
     } finally {
       setSubmitting(false);
     }
@@ -272,7 +309,7 @@ export default function NuevoMantenimientoPage() {
 
   if (loading) {
     return (
-      <MainLayout title="Nuevo Mantenimiento">
+      <MainLayout title="Editar Mantenimiento">
         <div className="flex items-center justify-center py-20">
           <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
         </div>
@@ -280,8 +317,24 @@ export default function NuevoMantenimientoPage() {
     );
   }
 
+  if (error && !vehiculoId) {
+    return (
+      <MainLayout title="Editar Mantenimiento">
+        <div className="flex flex-col items-center justify-center py-20 gap-4">
+          <p className="text-destructive">{error}</p>
+          <Link href="/mantenimientos">
+            <Button variant="outline">
+              <ArrowLeft className="h-4 w-4 mr-2" />
+              Volver a mantenimientos
+            </Button>
+          </Link>
+        </div>
+      </MainLayout>
+    );
+  }
+
   return (
-    <MainLayout title="Nuevo Mantenimiento">
+    <MainLayout title="Editar Mantenimiento">
       {/* Back button */}
       <div className="mb-4">
         <Link href="/mantenimientos">
@@ -302,7 +355,7 @@ export default function NuevoMantenimientoPage() {
               </div>
             )}
 
-            {/* Información básica */}
+            {/* Informacion basica */}
             <Card>
               <CardHeader>
                 <CardTitle className="text-base">Informacion Basica</CardTitle>
@@ -395,7 +448,7 @@ export default function NuevoMantenimientoPage() {
                   </div>
                 </div>
 
-                {/* Info de la categoria seleccionada (excepto "otro") */}
+                {/* Info de la categoria seleccionada */}
                 {categoriaInfo && categoria !== 'otro' && (
                   <div className="rounded-lg border bg-muted/50 p-4 space-y-2">
                     <div className="flex items-center gap-2 text-sm font-medium">
@@ -421,7 +474,6 @@ export default function NuevoMantenimientoPage() {
                   </div>
                 )}
 
-                {/* Campo especial para categoria "Otro" */}
                 {categoria === 'otro' && (
                   <div className="rounded-lg border border-orange-200 bg-orange-50 p-4 space-y-3">
                     <div className="flex items-center gap-2 text-sm font-medium text-orange-700">
@@ -585,25 +637,30 @@ export default function NuevoMantenimientoPage() {
               <CardHeader className="flex flex-row items-center justify-between">
                 <CardTitle className="text-base">Evidencia Visual</CardTitle>
                 <span className="text-xs text-muted-foreground">
-                  {imagenes.length}/5 archivos
+                  {archivos.length}/5 archivos
                 </span>
               </CardHeader>
               <CardContent>
-                {imagenes.length > 0 ? (
+                {archivos.length > 0 ? (
                   <div className="space-y-4">
                     <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-3">
-                      {imagenes.map((file, index) => (
+                      {archivos.map((archivo, index) => (
                         <div key={index} className="relative group aspect-square">
-                          {file.type === 'application/pdf' ? (
-                            <div className="flex flex-col items-center justify-center h-full w-full rounded-lg border bg-muted/50">
+                          {archivo.esPdf ? (
+                            <a
+                              href={archivo.tipo === 'existente' ? archivo.url : '#'}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="flex flex-col items-center justify-center h-full w-full rounded-lg border bg-muted/50 hover:bg-muted transition-colors"
+                            >
                               <FileText className="h-8 w-8 text-red-500" />
                               <span className="text-xs text-muted-foreground mt-1 px-1 text-center truncate w-full">
-                                {file.name}
+                                {archivo.nombre}
                               </span>
-                            </div>
+                            </a>
                           ) : (
                             <Image
-                              src={imagenesPreview[index]}
+                              src={archivo.url}
                               alt={`Imagen ${index + 1}`}
                               fill
                               className="object-cover rounded-lg border"
@@ -614,14 +671,14 @@ export default function NuevoMantenimientoPage() {
                             variant="destructive"
                             size="icon"
                             className="absolute -top-2 -right-2 h-6 w-6 opacity-0 group-hover:opacity-100 transition-opacity"
-                            onClick={() => eliminarImagen(index)}
+                            onClick={() => eliminarArchivo(index)}
                           >
                             <Trash2 className="h-3 w-3" />
                           </Button>
                         </div>
                       ))}
                     </div>
-                    {imagenes.length < 5 && (
+                    {archivos.length < 5 && (
                       <label className="flex items-center justify-center gap-2 p-3 border-2 border-dashed rounded-lg cursor-pointer hover:border-primary hover:bg-muted/50 transition-colors">
                         <ImagePlus className="h-4 w-4 text-muted-foreground" />
                         <span className="text-sm text-muted-foreground">
@@ -632,7 +689,7 @@ export default function NuevoMantenimientoPage() {
                           accept="image/*,.pdf"
                           multiple
                           className="hidden"
-                          onChange={agregarImagenes}
+                          onChange={agregarArchivos}
                         />
                       </label>
                     )}
@@ -651,7 +708,7 @@ export default function NuevoMantenimientoPage() {
                       accept="image/*,.pdf"
                       multiple
                       className="hidden"
-                      onChange={agregarImagenes}
+                      onChange={agregarArchivos}
                     />
                   </label>
                 )}
@@ -743,7 +800,7 @@ export default function NuevoMantenimientoPage() {
                 ) : (
                   <>
                     <Save className="h-4 w-4 mr-2" />
-                    Guardar Mantenimiento
+                    Guardar Cambios
                   </>
                 )}
               </Button>

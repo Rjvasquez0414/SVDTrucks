@@ -217,6 +217,43 @@ export async function deleteMantenimiento(id: string): Promise<boolean> {
   return true;
 }
 
+/**
+ * Obtiene un mantenimiento por ID con datos del vehiculo
+ */
+export async function getMantenimientoById(id: string): Promise<MantenimientoConVehiculo | null> {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { data, error } = await (supabase as any)
+    .from('mantenimientos')
+    .select(`
+      *,
+      vehiculos:vehiculo_id (placa, marca, modelo)
+    `)
+    .eq('id', id)
+    .single();
+
+  if (error) {
+    console.error('Error fetching mantenimiento:', error);
+    return null;
+  }
+
+  return data as MantenimientoConVehiculo;
+}
+
+/**
+ * Elimina todos los repuestos de un mantenimiento
+ */
+export async function deleteRepuestosByMantenimiento(mantenimientoId: string): Promise<void> {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { error } = await (supabase as any)
+    .from('repuestos')
+    .delete()
+    .eq('mantenimiento_id', mantenimientoId);
+
+  if (error) {
+    console.error('Error deleting repuestos:', error);
+  }
+}
+
 // =============================================
 // CONSULTAS DE REPUESTOS
 // =============================================

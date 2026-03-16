@@ -31,7 +31,7 @@ import { getVehiculos } from '@/lib/queries/vehiculos';
 import { getMantenimientos, type MantenimientoConVehiculo } from '@/lib/queries/mantenimientos';
 import { getCategoriaInfo, catalogoMantenimiento } from '@/data/tipos-mantenimiento';
 import { useRefetchOnFocus } from '@/hooks/useRefetchOnFocus';
-import { Plus, Search, Calendar, Wrench, Eye, Loader2 } from 'lucide-react';
+import { Plus, Search, Calendar, Wrench, Eye, Loader2, Pencil, FileText } from 'lucide-react';
 import type { TipoMantenimiento, VehiculoCompleto, CategoriaMantenimiento } from '@/types/database';
 import { formatNumber } from '@/lib/utils';
 import Link from 'next/link';
@@ -329,7 +329,17 @@ export default function MantenimientosPage() {
       <Dialog open={modalAbierto} onOpenChange={setModalAbierto}>
         <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle>Detalle de Mantenimiento</DialogTitle>
+            <div className="flex items-center justify-between">
+              <DialogTitle>Detalle de Mantenimiento</DialogTitle>
+              {mantenimientoSeleccionado && (
+                <Link href={`/mantenimientos/${mantenimientoSeleccionado.id}/editar`}>
+                  <Button size="sm" variant="outline">
+                    <Pencil className="h-4 w-4 mr-2" />
+                    Editar
+                  </Button>
+                </Link>
+              )}
+            </div>
           </DialogHeader>
 
           {mantenimientoSeleccionado && (() => {
@@ -408,26 +418,38 @@ export default function MantenimientosPage() {
                   </div>
                 )}
 
-                {/* Galería de imágenes */}
+                {/* Galeria de evidencia (imagenes + PDFs) */}
                 {mantenimientoSeleccionado.imagenes && mantenimientoSeleccionado.imagenes.length > 0 && (
                   <div>
-                    <p className="text-sm text-muted-foreground mb-2">Imagenes ({mantenimientoSeleccionado.imagenes.length})</p>
+                    <p className="text-sm text-muted-foreground mb-2">Evidencia ({mantenimientoSeleccionado.imagenes.length})</p>
                     <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
-                      {mantenimientoSeleccionado.imagenes.map((url, index) => (
-                        <a
-                          key={index}
-                          href={url}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="aspect-square rounded-lg overflow-hidden border hover:opacity-80 transition-opacity"
-                        >
-                          <img
-                            src={url}
-                            alt={`Imagen ${index + 1}`}
-                            className="w-full h-full object-cover"
-                          />
-                        </a>
-                      ))}
+                      {mantenimientoSeleccionado.imagenes.map((url, index) => {
+                        const esPdf = url.toLowerCase().endsWith('.pdf');
+                        return (
+                          <a
+                            key={index}
+                            href={url}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className={`aspect-square rounded-lg overflow-hidden border hover:opacity-80 transition-opacity ${esPdf ? 'flex flex-col items-center justify-center bg-muted/50' : ''}`}
+                          >
+                            {esPdf ? (
+                              <>
+                                <FileText className="h-10 w-10 text-red-500" />
+                                <span className="text-xs text-muted-foreground mt-1 px-2 text-center truncate w-full">
+                                  {url.split('/').pop() || 'documento.pdf'}
+                                </span>
+                              </>
+                            ) : (
+                              <img
+                                src={url}
+                                alt={`Imagen ${index + 1}`}
+                                className="w-full h-full object-cover"
+                              />
+                            )}
+                          </a>
+                        );
+                      })}
                     </div>
                   </div>
                 )}
