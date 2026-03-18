@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { MainLayout } from '@/components/layout/MainLayout';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -38,7 +38,7 @@ import type { VehiculoCompleto, CategoriaMantenimiento, TipoMantenimiento } from
 
 interface Repuesto {
   nombre: string;
-  cantidad: number;
+  cantidad: number | string;
   costoTotal: number | string;
 }
 
@@ -62,6 +62,7 @@ export default function NuevoMantenimientoPage() {
   const [repuestos, setRepuestos] = useState<Repuesto[]>([]);
   const [imagenes, setImagenes] = useState<File[]>([]);
   const [imagenesPreview, setImagenesPreview] = useState<string[]>([]);
+  const [isDragging, setIsDragging] = useState(false);
 
   // Estados de carga
   const [vehiculos, setVehiculos] = useState<VehiculoCompleto[]>([]);
@@ -127,6 +128,86 @@ export default function NuevoMantenimientoPage() {
     (sum, r) => sum + (Number(r.costoTotal) || 0),
     0
   );
+
+  // Navegación de teclado en repuestos (Enter, flechas)
+  const handleRepuestoKeyDown = useCallback((e: React.KeyboardEvent<HTMLInputElement>, row: number, col: number) => {
+    const totalRows = repuestos.length;
+    const maxCol = 2; // 0=nombre, 1=cantidad, 2=costoTotal
+
+    const focusCell = (r: number, c: number) => {
+      const target = document.querySelector<HTMLInputElement>(
+        `[data-repuesto-row="${r}"][data-repuesto-col="${c}"]`
+      );
+      if (target) {
+        target.focus();
+        target.select();
+      }
+    };
+
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      if (col < maxCol) {
+        focusCell(row, col + 1);
+      } else if (row < totalRows - 1) {
+        focusCell(row + 1, 0);
+      }
+      return;
+    }
+
+    if (e.key === 'ArrowDown') {
+      e.preventDefault();
+      if (row < totalRows - 1) focusCell(row + 1, col);
+      return;
+    }
+
+    if (e.key === 'ArrowUp') {
+      e.preventDefault();
+      if (row > 0) focusCell(row - 1, col);
+      return;
+    }
+
+    const input = e.currentTarget;
+    if (e.key === 'ArrowRight' && input.selectionStart === input.value.length) {
+      e.preventDefault();
+      if (col < maxCol) focusCell(row, col + 1);
+      else if (row < totalRows - 1) focusCell(row + 1, 0);
+      return;
+    }
+
+    if (e.key === 'ArrowLeft' && input.selectionStart === 0) {
+      e.preventDefault();
+      if (col > 0) focusCell(row, col - 1);
+      else if (row > 0) focusCell(row - 1, maxCol);
+      return;
+    }
+  }, [repuestos.length]);
+
+  // Drag & drop para evidencia
+  const handleDragOver = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDragging(true);
+  }, []);
+
+  const handleDragLeave = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDragging(false);
+  }, []);
+
+  const handleDrop = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDragging(false);
+    const files = Array.from(e.dataTransfer.files).filter(
+      (f) => f.type.startsWith('image/') || f.type === 'application/pdf'
+    );
+    if (files.length === 0) return;
+    const nuevasImagenes = [...imagenes, ...files].slice(0, 5);
+    setImagenes(nuevasImagenes);
+    imagenesPreview.forEach((url) => { if (url) URL.revokeObjectURL(url); });
+    const previews = nuevasImagenes.map((file) =>
+      file.type === 'application/pdf' ? '' : URL.createObjectURL(file)
+    );
+    setImagenesPreview(previews);
+  }, [imagenes, imagenesPreview]);
 
   // Funciones para manejo de archivos (imagenes + PDFs)
   const agregarImagenes = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -236,12 +317,16 @@ export default function NuevoMantenimientoPage() {
       if (repuestos.length > 0) {
         const repuestosData = repuestos
           .filter((r) => r.nombre.trim())
-          .map((r) => ({
-            mantenimiento_id: mantenimiento.id,
-            nombre: r.nombre,
-            cantidad: r.cantidad,
-            costo_unitario: r.cantidad > 0 ? Math.round((Number(r.costoTotal) || 0) / r.cantidad) : (Number(r.costoTotal) || 0),
-          }));
+          .map((r) => {
+            const cant = Number(r.cantidad) || 1;
+            const costoTotal = Number(r.costoTotal) || 0;
+            return {
+              mantenimiento_id: mantenimiento.id,
+              nombre: r.nombre,
+              cantidad: cant,
+              costo_unitario: cant > 0 ? Math.round(costoTotal / cant) : costoTotal,
+            };
+          });
 
         if (repuestosData.length > 0) {
           await createRepuestos(repuestosData);
@@ -532,33 +617,40 @@ export default function NuevoMantenimientoPage() {
                             onChange={(e) =>
                               actualizarRepuesto(index, 'nombre', e.target.value)
                             }
+                            data-repuesto-row={index}
+                            data-repuesto-col={0}
+                            onKeyDown={(e) => handleRepuestoKeyDown(e, index, 0)}
                           />
                         </div>
                         <div className="w-20 space-y-1">
                           <Label className="text-xs">Cant.</Label>
                           <Input
-                            type="number"
-                            min="1"
+                            type="text"
+                            inputMode="numeric"
                             value={repuesto.cantidad}
-                            onChange={(e) =>
-                              actualizarRepuesto(index, 'cantidad', parseInt(e.target.value) || 1)
-                            }
+                            onChange={(e) => {
+                              const raw = e.target.value.replace(/\D/g, '');
+                              actualizarRepuesto(index, 'cantidad', raw === '' ? '' : parseInt(raw));
+                            }}
+                            data-repuesto-row={index}
+                            data-repuesto-col={1}
+                            onKeyDown={(e) => handleRepuestoKeyDown(e, index, 1)}
                           />
                         </div>
                         <div className="w-32 space-y-1">
                           <Label className="text-xs">Costo Total</Label>
                           <Input
-                            type="number"
-                            min="0"
+                            type="text"
+                            inputMode="numeric"
                             placeholder="0"
                             value={repuesto.costoTotal}
-                            onChange={(e) =>
-                              actualizarRepuesto(
-                                index,
-                                'costoTotal',
-                                e.target.value === '' ? '' : parseInt(e.target.value) || 0
-                              )
-                            }
+                            onChange={(e) => {
+                              const raw = e.target.value.replace(/\D/g, '');
+                              actualizarRepuesto(index, 'costoTotal', raw === '' ? '' : parseInt(raw));
+                            }}
+                            data-repuesto-row={index}
+                            data-repuesto-col={2}
+                            onKeyDown={(e) => handleRepuestoKeyDown(e, index, 2)}
                           />
                         </div>
                         <Button
@@ -589,6 +681,11 @@ export default function NuevoMantenimientoPage() {
                 </span>
               </CardHeader>
               <CardContent>
+                <div
+                  onDragOver={handleDragOver}
+                  onDragLeave={handleDragLeave}
+                  onDrop={handleDrop}
+                >
                 {imagenes.length > 0 ? (
                   <div className="space-y-4">
                     <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-3">
@@ -622,10 +719,10 @@ export default function NuevoMantenimientoPage() {
                       ))}
                     </div>
                     {imagenes.length < 5 && (
-                      <label className="flex items-center justify-center gap-2 p-3 border-2 border-dashed rounded-lg cursor-pointer hover:border-primary hover:bg-muted/50 transition-colors">
+                      <label className={`flex items-center justify-center gap-2 p-3 border-2 border-dashed rounded-lg cursor-pointer transition-colors ${isDragging ? 'border-primary bg-primary/10' : 'hover:border-primary hover:bg-muted/50'}`}>
                         <ImagePlus className="h-4 w-4 text-muted-foreground" />
                         <span className="text-sm text-muted-foreground">
-                          Agregar mas archivos
+                          {isDragging ? 'Suelta los archivos aqui' : 'Agregar mas archivos'}
                         </span>
                         <input
                           type="file"
@@ -638,10 +735,10 @@ export default function NuevoMantenimientoPage() {
                     )}
                   </div>
                 ) : (
-                  <label className="flex flex-col items-center justify-center gap-2 p-8 border-2 border-dashed rounded-lg cursor-pointer hover:border-primary hover:bg-muted/50 transition-colors">
+                  <label className={`flex flex-col items-center justify-center gap-2 p-8 border-2 border-dashed rounded-lg cursor-pointer transition-colors ${isDragging ? 'border-primary bg-primary/10' : 'hover:border-primary hover:bg-muted/50'}`}>
                     <ImagePlus className="h-8 w-8 text-muted-foreground" />
                     <span className="text-sm text-muted-foreground text-center">
-                      Haz clic para agregar fotos o PDFs del mantenimiento
+                      {isDragging ? 'Suelta los archivos aqui' : 'Haz clic o arrastra fotos o PDFs del mantenimiento'}
                     </span>
                     <span className="text-xs text-muted-foreground">
                       Maximo 5 archivos (imagenes o PDF)
@@ -655,6 +752,7 @@ export default function NuevoMantenimientoPage() {
                     />
                   </label>
                 )}
+                </div>
               </CardContent>
             </Card>
           </div>
