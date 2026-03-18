@@ -46,6 +46,7 @@ export interface Repuesto {
   nombre: string;
   cantidad: number;
   costo_unitario: number;
+  costo_total: number;
   created_at: string;
 }
 
@@ -54,6 +55,7 @@ export interface RepuestoInsert {
   nombre: string;
   cantidad?: number;
   costo_unitario?: number;
+  costo_total?: number;
 }
 
 export interface MantenimientoConVehiculo extends Mantenimiento {

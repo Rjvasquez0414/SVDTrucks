@@ -28,10 +28,10 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog';
 import { getVehiculos } from '@/lib/queries/vehiculos';
-import { getMantenimientos, type MantenimientoConVehiculo } from '@/lib/queries/mantenimientos';
+import { getMantenimientos, deleteMantenimiento, type MantenimientoConVehiculo } from '@/lib/queries/mantenimientos';
 import { getCategoriaInfo, catalogoMantenimiento } from '@/data/tipos-mantenimiento';
 import { useRefetchOnFocus } from '@/hooks/useRefetchOnFocus';
-import { Plus, Search, Calendar, Wrench, Eye, Loader2, Pencil, FileText } from 'lucide-react';
+import { Plus, Search, Calendar, Wrench, Eye, Loader2, Pencil, FileText, Trash2 } from 'lucide-react';
 import type { TipoMantenimiento, VehiculoCompleto, CategoriaMantenimiento } from '@/types/database';
 import { formatNumber } from '@/lib/utils';
 import Link from 'next/link';
@@ -47,6 +47,8 @@ export default function MantenimientosPage() {
   const [loading, setLoading] = useState(true);
   const [mantenimientoSeleccionado, setMantenimientoSeleccionado] = useState<MantenimientoConVehiculo | null>(null);
   const [modalAbierto, setModalAbierto] = useState(false);
+  const [eliminando, setEliminando] = useState(false);
+  const [confirmarEliminar, setConfirmarEliminar] = useState(false);
 
   const loadData = useCallback(async () => {
     try {
@@ -105,6 +107,22 @@ export default function MantenimientosPage() {
   };
 
   const costoTotal = mantenimientosFiltrados.reduce((sum, m) => sum + (m.costo || 0), 0);
+
+  const handleEliminar = async () => {
+    if (!mantenimientoSeleccionado) return;
+    setEliminando(true);
+    try {
+      await deleteMantenimiento(mantenimientoSeleccionado.id);
+      setModalAbierto(false);
+      setConfirmarEliminar(false);
+      setMantenimientoSeleccionado(null);
+      await loadData();
+    } catch (err) {
+      console.error('Error eliminando mantenimiento:', err);
+    } finally {
+      setEliminando(false);
+    }
+  };
 
   if (loading) {
     return (
@@ -326,18 +344,29 @@ export default function MantenimientosPage() {
       </Card>
 
       {/* Modal de detalle de mantenimiento */}
-      <Dialog open={modalAbierto} onOpenChange={setModalAbierto}>
+      <Dialog open={modalAbierto} onOpenChange={(open) => { setModalAbierto(open); if (!open) setConfirmarEliminar(false); }}>
         <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <div className="flex items-center justify-between">
               <DialogTitle>Detalle de Mantenimiento</DialogTitle>
               {mantenimientoSeleccionado && (
-                <Link href={`/mantenimientos/${mantenimientoSeleccionado.id}/editar`}>
-                  <Button size="sm" variant="outline">
-                    <Pencil className="h-4 w-4 mr-2" />
-                    Editar
+                <div className="flex gap-2">
+                  <Link href={`/mantenimientos/${mantenimientoSeleccionado.id}/editar`}>
+                    <Button size="sm" variant="outline">
+                      <Pencil className="h-4 w-4 mr-2" />
+                      Editar
+                    </Button>
+                  </Link>
+                  <Button
+                    size="sm"
+                    variant="destructive"
+                    onClick={() => setConfirmarEliminar(true)}
+                    disabled={eliminando}
+                  >
+                    <Trash2 className="h-4 w-4 mr-2" />
+                    Eliminar
                   </Button>
-                </Link>
+                </div>
               )}
             </div>
           </DialogHeader>
@@ -456,6 +485,40 @@ export default function MantenimientosPage() {
               </div>
             );
           })()}
+
+          {/* Confirmación de eliminación */}
+          {confirmarEliminar && (
+            <div className="mt-4 rounded-lg border border-destructive/50 bg-destructive/10 p-4 space-y-3">
+              <p className="text-sm font-medium text-destructive">
+                ¿Estas seguro de eliminar este mantenimiento? Esta accion no se puede deshacer.
+              </p>
+              <div className="flex gap-2">
+                <Button
+                  size="sm"
+                  variant="destructive"
+                  onClick={handleEliminar}
+                  disabled={eliminando}
+                >
+                  {eliminando ? (
+                    <>
+                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                      Eliminando...
+                    </>
+                  ) : (
+                    'Si, eliminar'
+                  )}
+                </Button>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => setConfirmarEliminar(false)}
+                  disabled={eliminando}
+                >
+                  Cancelar
+                </Button>
+              </div>
+            </div>
+          )}
         </DialogContent>
       </Dialog>
     </MainLayout>

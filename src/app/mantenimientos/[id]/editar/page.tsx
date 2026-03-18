@@ -113,7 +113,7 @@ export default function EditarMantenimientoPage() {
           repuestosData.map((r) => ({
             nombre: r.nombre,
             cantidad: r.cantidad,
-            costoTotal: r.costo_unitario * r.cantidad,
+            costoTotal: r.costo_total || (r.costo_unitario * r.cantidad),
           }))
         );
       }
@@ -184,7 +184,8 @@ export default function EditarMantenimientoPage() {
       );
       if (target) {
         target.focus();
-        target.select();
+        const len = target.value.length;
+        target.setSelectionRange(len, len);
       }
     };
 
@@ -358,12 +359,13 @@ export default function EditarMantenimientoPage() {
           .filter((r) => r.nombre.trim())
           .map((r) => {
             const cant = Number(r.cantidad) || 1;
-            const costoTotal = Number(r.costoTotal) || 0;
+            const total = Number(r.costoTotal) || 0;
             return {
               mantenimiento_id: mantenimientoId,
               nombre: r.nombre,
               cantidad: cant,
-              costo_unitario: cant > 0 ? Math.round(costoTotal / cant) : costoTotal,
+              costo_unitario: cant > 0 ? Math.round(total / cant) : total,
+              costo_total: total,
             };
           });
 
@@ -686,6 +688,11 @@ export default function EditarMantenimientoPage() {
                               const raw = e.target.value.replace(/\D/g, '');
                               actualizarRepuesto(index, 'cantidad', raw === '' ? '' : parseInt(raw));
                             }}
+                            onCopy={(e) => {
+                              e.preventDefault();
+                              const val = String(repuesto.cantidad);
+                              e.clipboardData.setData('text/plain', val ? formatNumber(Number(val)) : '');
+                            }}
                             data-repuesto-row={index}
                             data-repuesto-col={1}
                             onKeyDown={(e) => handleRepuestoKeyDown(e, index, 1)}
@@ -696,11 +703,15 @@ export default function EditarMantenimientoPage() {
                           <Input
                             type="text"
                             inputMode="numeric"
-                            placeholder="0"
                             value={repuesto.costoTotal}
                             onChange={(e) => {
                               const raw = e.target.value.replace(/\D/g, '');
                               actualizarRepuesto(index, 'costoTotal', raw === '' ? '' : parseInt(raw));
+                            }}
+                            onCopy={(e) => {
+                              e.preventDefault();
+                              const val = String(repuesto.costoTotal);
+                              e.clipboardData.setData('text/plain', val ? formatNumber(Number(val)) : '');
                             }}
                             data-repuesto-row={index}
                             data-repuesto-col={2}
