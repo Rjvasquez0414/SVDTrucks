@@ -108,8 +108,6 @@ export default function EditarMantenimientoPage() {
       setObservaciones(mantenimiento.observaciones || '');
 
       // Cargar repuestos existentes
-      console.log('[Editar] Repuestos cargados de BD:', repuestosData.length, repuestosData);
-      console.log('[Editar] Imagenes en mantenimiento:', mantenimiento.imagenes);
       if (repuestosData.length > 0) {
         setRepuestos(
           repuestosData.map((r) => ({
