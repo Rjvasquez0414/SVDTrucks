@@ -325,7 +325,7 @@ export default function NuevoMantenimientoPage() {
               mantenimiento_id: mantenimiento.id,
               nombre: r.nombre,
               cantidad: cant,
-              costo_unitario: cant > 0 ? Math.round(total / cant) : total,
+              costo_unitario: cant > 0 ? parseFloat((total / cant).toFixed(2)) : total,
               costo_total: total,
             };
           });

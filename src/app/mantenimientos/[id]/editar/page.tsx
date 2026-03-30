@@ -113,7 +113,9 @@ export default function EditarMantenimientoPage() {
           repuestosData.map((r) => ({
             nombre: r.nombre,
             cantidad: r.cantidad,
-            costoTotal: r.costo_total || (r.costo_unitario * r.cantidad),
+            costoTotal: r.costo_total != null && Number(r.costo_total) > 0
+              ? Number(r.costo_total)
+              : Number(r.costo_unitario) * Number(r.cantidad),
           }))
         );
       }
@@ -158,7 +160,7 @@ export default function EditarMantenimientoPage() {
   };
 
   const agregarRepuesto = () => {
-    setRepuestos([...repuestos, { nombre: '', cantidad: 1, costoTotal: 0 }]);
+    setRepuestos([...repuestos, { nombre: '', cantidad: 1, costoTotal: '' }]);
   };
 
   const actualizarRepuesto = (index: number, field: keyof RepuestoForm, value: string | number) => {
@@ -364,7 +366,7 @@ export default function EditarMantenimientoPage() {
               mantenimiento_id: mantenimientoId,
               nombre: r.nombre,
               cantidad: cant,
-              costo_unitario: cant > 0 ? Math.round(total / cant) : total,
+              costo_unitario: cant > 0 ? parseFloat((total / cant).toFixed(2)) : total,
               costo_total: total,
             };
           });

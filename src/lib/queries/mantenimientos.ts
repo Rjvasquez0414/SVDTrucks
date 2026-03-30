@@ -253,6 +253,7 @@ export async function deleteRepuestosByMantenimiento(mantenimientoId: string): P
 
   if (error) {
     console.error('Error deleting repuestos:', error);
+    throw new Error('Error eliminando repuestos: ' + error.message);
   }
 }
 

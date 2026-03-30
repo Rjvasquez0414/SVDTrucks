@@ -116,6 +116,7 @@ CREATE TABLE public.repuestos (
   nombre TEXT NOT NULL,
   cantidad INTEGER NOT NULL DEFAULT 1,
   costo_unitario DECIMAL(12,2) NOT NULL DEFAULT 0,
+  costo_total DECIMAL(12,2) NOT NULL DEFAULT 0,
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
@@ -278,6 +279,21 @@ CREATE POLICY "Admins pueden insertar repuestos"
   ON public.repuestos FOR INSERT
   TO authenticated
   WITH CHECK (is_admin());
+
+CREATE POLICY "Admins pueden eliminar repuestos"
+  ON public.repuestos FOR DELETE
+  TO authenticated
+  USING (is_admin());
+
+CREATE POLICY "Admins pueden actualizar repuestos"
+  ON public.repuestos FOR UPDATE
+  TO authenticated
+  USING (is_admin());
+
+CREATE POLICY "Admins pueden eliminar mantenimientos"
+  ON public.mantenimientos FOR DELETE
+  TO authenticated
+  USING (is_admin());
 
 CREATE POLICY "Admins pueden actualizar alertas"
   ON public.alertas FOR UPDATE
