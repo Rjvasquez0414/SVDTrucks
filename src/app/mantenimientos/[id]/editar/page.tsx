@@ -288,6 +288,7 @@ export default function EditarMantenimientoPage() {
 
   const subirArchivos = async (): Promise<string[]> => {
     const urls: string[] = [];
+    const errores: string[] = [];
 
     for (const archivo of archivos) {
       if (archivo.tipo === 'existente') {
@@ -306,6 +307,7 @@ export default function EditarMantenimientoPage() {
 
       if (error) {
         console.error('Error subiendo archivo:', error);
+        errores.push(`${archivo.nombre}: ${error.message}`);
         continue;
       }
 
@@ -314,6 +316,10 @@ export default function EditarMantenimientoPage() {
         .getPublicUrl(fileName);
 
       urls.push(urlData.publicUrl);
+    }
+
+    if (errores.length > 0) {
+      setError(`Error subiendo archivos: ${errores.join(', ')}`);
     }
 
     return urls;

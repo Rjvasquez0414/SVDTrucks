@@ -60,6 +60,12 @@ function singleFetch(input: RequestInfo | URL, init?: RequestInit): Promise<Resp
 }
 
 const fetchWithRetry: typeof fetch = async (input, init) => {
+  // Bypass short timeout for storage uploads (large files need more time)
+  const url = typeof input === 'string' ? input : input instanceof URL ? input.href : (input as Request).url;
+  if (url.includes('/storage/v1/object') && init?.method?.toUpperCase() === 'POST') {
+    return fetch(input, init);
+  }
+
   const callerSignal = init?.signal;
 
   for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
