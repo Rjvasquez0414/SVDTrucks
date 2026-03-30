@@ -108,6 +108,8 @@ export default function EditarMantenimientoPage() {
       setObservaciones(mantenimiento.observaciones || '');
 
       // Cargar repuestos existentes
+      console.log('[Editar] Repuestos cargados de BD:', repuestosData.length, repuestosData);
+      console.log('[Editar] Imagenes en mantenimiento:', mantenimiento.imagenes);
       if (repuestosData.length > 0) {
         setRepuestos(
           repuestosData.map((r) => ({
@@ -341,10 +343,31 @@ export default function EditarMantenimientoPage() {
       const proximoKm = calcularProximoKm(categoria, kmActual);
       const proximaFecha = calcularProximaFecha(categoria, fecha);
 
-      // Subir archivos nuevos y mantener existentes
+      // 1. Subir archivos nuevos PRIMERO (antes de actualizar el mantenimiento)
       const imageUrls = await subirArchivos();
 
-      // Actualizar mantenimiento
+      // 2. Preparar repuestos ANTES de eliminar los antiguos
+      const repuestosParaCrear = repuestos
+        .filter((r) => r.nombre.trim())
+        .map((r) => {
+          const cant = Number(r.cantidad) || 1;
+          const total = Number(r.costoTotal) || 0;
+          return {
+            mantenimiento_id: mantenimientoId,
+            nombre: r.nombre,
+            cantidad: cant,
+            costo_unitario: cant > 0 ? parseFloat((total / cant).toFixed(2)) : total,
+            costo_total: total,
+          };
+        });
+
+      // 3. Reemplazar repuestos: eliminar y recrear inmediatamente
+      await deleteRepuestosByMantenimiento(mantenimientoId);
+      if (repuestosParaCrear.length > 0) {
+        await createRepuestos(repuestosParaCrear);
+      }
+
+      // 4. Actualizar mantenimiento (solo si los repuestos se guardaron bien)
       await updateMantenimiento(mantenimientoId, {
         vehiculo_id: vehiculoId,
         tipo,
@@ -360,29 +383,7 @@ export default function EditarMantenimientoPage() {
         imagenes: imageUrls,
       });
 
-      // Reemplazar repuestos: eliminar todos y recrear
-      await deleteRepuestosByMantenimiento(mantenimientoId);
-      if (repuestos.length > 0) {
-        const repuestosData = repuestos
-          .filter((r) => r.nombre.trim())
-          .map((r) => {
-            const cant = Number(r.cantidad) || 1;
-            const total = Number(r.costoTotal) || 0;
-            return {
-              mantenimiento_id: mantenimientoId,
-              nombre: r.nombre,
-              cantidad: cant,
-              costo_unitario: cant > 0 ? parseFloat((total / cant).toFixed(2)) : total,
-              costo_total: total,
-            };
-          });
-
-        if (repuestosData.length > 0) {
-          await createRepuestos(repuestosData);
-        }
-      }
-
-      // Actualizar kilometraje del vehiculo si es mayor
+      // 5. Actualizar kilometraje del vehiculo si es mayor
       if (vehiculoSeleccionado && kmActual > vehiculoSeleccionado.kilometraje) {
         await actualizarKilometrajeVehiculo(vehiculoId, kmActual);
       }
